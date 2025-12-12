@@ -1,0 +1,72 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  // url      = env("DATABASE_URL")
+}
+
+// Enum Role
+enum Role {
+  admin
+  guru
+  siswa
+}
+
+// Tabel Utama: USERS
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  password     String
+  role         Role
+  status_aktif Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relasi Optional (User mungkin Admin, Guru, ATAU Siswa)
+  admin Admin?
+  guru  Guru?
+  siswa Siswa?
+
+  @@map("users")
+}
+
+// Tabel Profil: ADMIN
+model Admin {
+  admin_id     Int    @id @default(autoincrement())
+  nama_lengkap String
+  
+  userId       Int    @unique
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admins")
+}
+
+// Tabel Profil: GURU
+model Guru {
+  guru_id      Int    @id @default(autoincrement())
+  nama_lengkap String
+
+  userId       Int    @unique
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("gurus")
+}
+
+//   Tabel Profil: SISWA
+model Siswa {
+  siswa_id     Int    @id @default(autoincrement())
+  nama_lengkap String
+  kelas        String
+  tingkat      String
+  jurusan      String
+
+  userId       Int    @unique
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("siswas")
+}
+
