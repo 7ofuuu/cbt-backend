@@ -126,10 +126,10 @@ const submitJawaban = async (req, res) => {
     if (soal.tipe_soal === 'PILIHAN_GANDA_SINGLE' && jawaban_pg_opsi_ids) {
       const opsiIds = JSON.parse(jawaban_pg_opsi_ids);
       const correctOpsi = soal.opsiJawabans.find(o => o.is_benar);
-      is_correct = correctOpsi && opsiIds.includes(correctOpsi.opsi_id.toString());
+      is_correct = correctOpsi && opsiIds.map(String).includes(String(correctOpsi.opsi_id));
     } else if (soal.tipe_soal === 'PILIHAN_GANDA_MULTIPLE' && jawaban_pg_opsi_ids) {
-      const opsiIds = JSON.parse(jawaban_pg_opsi_ids);
-      const correctOpsiIds = soal.opsiJawabans.filter(o => o.is_benar).map(o => o.opsi_id.toString());
+      const opsiIds = JSON.parse(jawaban_pg_opsi_ids).map(String);
+      const correctOpsiIds = soal.opsiJawabans.filter(o => o.is_benar).map(o => String(o.opsi_id));
       is_correct = JSON.stringify(opsiIds.sort()) === JSON.stringify(correctOpsiIds.sort());
     }
 

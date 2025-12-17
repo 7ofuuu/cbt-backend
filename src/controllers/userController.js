@@ -183,6 +183,11 @@ const nilaiJawaban = async (req, res) => {
   const { jawaban_id, nilai_manual } = req.body;
 
   try {
+    // Validate nilai range
+    if (nilai_manual < 0 || nilai_manual > 100) {
+      return res.status(400).json({ error: 'Nilai harus antara 0-100' });
+    }
+
     const jawaban = await prisma.jawaban.findUnique({
       where: { jawaban_id },
       include: {
@@ -204,12 +209,12 @@ const nilaiJawaban = async (req, res) => {
       return res.status(403).json({ error: 'Anda tidak berhak menilai jawaban ini' });
     }
 
-    await prisma.jawaban.update({
+    const updatedJawaban = await prisma.jawaban.update({
       where: { jawaban_id },
       data: { nilai_manual }
     });
 
-    res.json({ message: 'Jawaban berhasil dinilai' });
+    res.json({ message: 'Jawaban berhasil dinilai', jawaban: updatedJawaban });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
