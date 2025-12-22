@@ -3,7 +3,12 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "set NODE_ENV=test&& jest --runInBand --detectOpenHandles",
+    "test:watch": "set NODE_ENV=test&& jest --watch --runInBand",
+    "test:coverage": "set NODE_ENV=test&& jest --coverage --runInBand",
+    "test:unit": "set NODE_ENV=test&& jest tests/unit --runInBand",
+    "test:integration": "set NODE_ENV=test&& jest tests/integration --runInBand",
+    "test:e2e": "set NODE_ENV=test&& jest tests/e2e --runInBand",
     "dev": "nodemon index.js",
     "postinstall": "prisma generate",
     "build": "npx prisma generate",
@@ -23,7 +28,10 @@
     "jsonwebtoken": "^9.0.3"
   },
   "devDependencies": {
+    "@faker-js/faker": "^8.3.1",
+    "jest": "^29.7.0",
     "nodemon": "^3.1.11",
-    "prisma": "^6.19.0"
+    "prisma": "^6.19.0",
+    "supertest": "^6.3.3"
   }
 }
