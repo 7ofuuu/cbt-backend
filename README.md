@@ -92,87 +92,11 @@ Each user has a profile table (admins, gurus, or siswas) linked to the main user
 
 ## API Endpoints
 
-Total: **32 endpoints** dengan role-based access control
+### Authentication Routes (`/api/auth`)
 
-### 🔐 Authentication (`/api/auth`)
-
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/api/auth/register` | Register user baru | No |
-| POST | `/api/auth/login` | Login user | No |
-
-### 📝 Soal Management (`/api/soal`)
-
-**Role Required:** Guru
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/soal` | Create soal baru |
-| GET | `/api/soal` | Get semua soal (dengan filter) |
-| GET | `/api/soal/:id` | Get soal by ID |
-| PUT | `/api/soal/:id` | Update soal |
-| DELETE | `/api/soal/:id` | Delete soal |
-
-### 📋 Ujian Management (`/api/ujian`)
-
-**Role Required:** Guru
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/ujian` | Create ujian baru |
-| GET | `/api/ujian` | Get semua ujian |
-| GET | `/api/ujian/:id` | Get ujian by ID |
-| PUT | `/api/ujian/:id` | Update ujian |
-| DELETE | `/api/ujian/:id` | Delete ujian |
-| POST | `/api/ujian/assign-soal` | Assign soal ke ujian |
-| DELETE | `/api/ujian/remove-soal/:id` | Remove soal dari ujian |
-| POST | `/api/ujian/assign-siswa` | Assign siswa ke ujian |
-
-### 🎓 Siswa - Ujian (`/api/siswa`)
-
-**Role Required:** Siswa
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/siswa/ujians` | Get ujian yang di-assign |
-| POST | `/api/siswa/ujians/start` | Mulai ujian |
-| POST | `/api/siswa/ujians/jawaban` | Submit jawaban per soal |
-| POST | `/api/siswa/ujians/finish` | Finish ujian |
-| GET | `/api/siswa/ujians/hasil/:peserta_ujian_id` | Get hasil ujian |
-
-### 👥 User Management (`/api/users`)
-
-**Admin Endpoints:**
-
-| Method | Endpoint | Description | Role |
-|--------|----------|-------------|------|
-| GET | `/api/users` | Get semua users | Admin |
-| POST | `/api/users` | Create user baru | Admin |
-| PUT | `/api/users/:id/role` | Update role user | Admin |
-| PATCH | `/api/users/:id/status` | Toggle status aktif user | Admin |
-| DELETE | `/api/users/:id` | Delete user | Admin |
-
-**Guru Endpoints:**
-
-| Method | Endpoint | Description | Role |
-|--------|----------|-------------|------|
-| POST | `/api/users/nilai` | Nilai jawaban essay manual | Guru |
-| POST | `/api/users/finalisasi` | Finalisasi nilai ujian | Guru |
-
-### 📊 Activity Management (`/api/admin/activities`)
-
-**Role Required:** Admin
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/admin/activities` | Get semua aktivitas ujian |
-| GET | `/api/admin/activities/:ujianId/participants` | Get peserta ujian |
-| GET | `/api/admin/activities/participant/:pesertaUjianId` | Get detail peserta |
-| POST | `/api/admin/activities/:pesertaUjianId/block` | Block peserta ujian |
-| POST | `/api/admin/activities/:pesertaUjianId/generate-unlock` | Generate unlock code |
-| POST | `/api/admin/activities/:pesertaUjianId/unblock` | Unblock peserta |
-
-> **Note:** Untuk detail request/response format, lihat [API_DOCUMENTATION.md](API_DOCUMENTATION.md)
+- `POST /api/auth/register` - Register a new user
+- `POST /api/auth/login` - User login
+- Additional auth endpoints available
 
 ## Project Structure
 
