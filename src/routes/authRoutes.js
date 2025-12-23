@@ -1,13 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { register, login, logout } = require('../controllers/authController');
-const { validateRegister, validateLogin } = require('../middlewares/validationMiddleware');
-const { verifyToken, checkRole } = require('../middlewares/authMiddleware');
+const { register, login } = require('../controllers/authController');
+const { validateRegister } = require('../middlewares/validationMiddleware');
 
-// Endpoint: POST /api/auth/register (Admin only)
-router.post('/register', verifyToken, checkRole('admin'), validateRegister, register);
+// Endpoint: POST /api/auth/register
+router.post('/register', validateRegister, register);
 
 // Endpoint: POST /api/auth/login
-router.post('/login', validateLogin, login);
+router.post('/login', login);
 
 module.exports = router;
