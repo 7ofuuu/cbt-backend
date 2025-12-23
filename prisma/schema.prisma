@@ -6,16 +6,30 @@ generator client {
 
 datasource db {
   provider = "mysql"
-  // url      = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
-// Enum Role
+// ============ ENUMS ============
 enum Role {
   admin
   guru
   siswa
 }
 
+enum TipeSoal {
+  PILIHAN_GANDA_SINGLE
+  PILIHAN_GANDA_MULTIPLE
+  ESSAY
+}
+
+enum StatusUjian {
+  BELUM_MULAI
+  SEDANG_DIKERJAKAN
+  SELESAI
+  DINILAI
+}
+
+// ============ USER & PROFIL ============
 // Tabel Utama: USERS
 model User {
   id           Int      @id @default(autoincrement())
@@ -38,9 +52,9 @@ model User {
 model Admin {
   admin_id     Int    @id @default(autoincrement())
   nama_lengkap String
-  
-  userId       Int    @unique
-  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("admins")
 }
@@ -50,13 +64,17 @@ model Guru {
   guru_id      Int    @id @default(autoincrement())
   nama_lengkap String
 
-  userId       Int    @unique
-  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Relasi
+  soals  Soal[] // Guru bisa buat banyak soal
+  ujians Ujian[] // Guru bisa buat banyak ujian
 
   @@map("gurus")
 }
 
-//   Tabel Profil: SISWA
+// Tabel Profil: SISWA
 model Siswa {
   siswa_id     Int    @id @default(autoincrement())
   nama_lengkap String
@@ -64,9 +82,143 @@ model Siswa {
   tingkat      String
   jurusan      String
 
-  userId       Int    @unique
-  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Relasi
+  pesertaUjians PesertaUjian[] // Siswa bisa ikut banyak ujian
 
   @@map("siswas")
 }
 
+// ============ BANK SOAL ============
+// Tabel SOAL
+model Soal {
+  soal_id         Int      @id @default(autoincrement())
+  tipe_soal       TipeSoal
+  teks_soal       String   @db.Text
+  mata_pelajaran  String
+  tingkat         String // "10", "11", "12"
+  jurusan         String? // "IPA", "IPS", null (umum)
+  soal_gambar     String? // URL gambar
+  soal_pembahasan String?  @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  guru_id Int
+  guru    Guru @relation(fields: [guru_id], references: [guru_id], onDelete: Cascade)
+
+  // Relasi
+  opsiJawabans OpsiJawaban[] // Soal punya banyak opsi (jika pilihan ganda)
+  soalUjians   SoalUjian[] // Soal bisa dipakai di banyak ujian
+  jawabans     Jawaban[] // Soal punya banyak jawaban dari siswa
+
+  @@map("soals")
+}
+
+// Tabel OPSI_JAWABAN (untuk pilihan ganda)
+model OpsiJawaban {
+  opsi_id   Int     @id @default(autoincrement())
+  label     String // "A", "B", "C", "D", "E"
+  teks_opsi String  @db.Text
+  is_benar  Boolean @default(false)
+
+  soal_id Int
+  soal    Soal @relation(fields: [soal_id], references: [soal_id], onDelete: Cascade)
+
+  @@map("opsi_jawabans")
+}
+
+// ============ UJIAN ============
+// Tabel UJIAN
+model Ujian {
+  ujian_id        Int      @id @default(autoincrement())
+  nama_ujian      String
+  mata_pelajaran  String
+  tingkat         String
+  jurusan         String?
+  tanggal_mulai   DateTime
+  tanggal_selesai DateTime
+  durasi_menit    Int // 270
+  is_acak_soal    Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  guru_id Int
+  guru    Guru @relation(fields: [guru_id], references: [guru_id], onDelete: Cascade)
+
+  // Relasi
+  soalUjians    SoalUjian[] // Ujian punya banyak soal
+  pesertaUjians PesertaUjian[] // Ujian punya banyak peserta
+
+  @@map("ujians")
+}
+
+// Tabel SOAL_UJIAN (junction table: Ujian <-> Soal)
+model SoalUjian {
+  soal_ujian_id Int @id @default(autoincrement())
+  bobot_nilai   Int // Nilai per soal (misal 10 poin)
+  urutan        Int // Urutan soal di ujian
+
+  ujian_id Int
+  ujian    Ujian @relation(fields: [ujian_id], references: [ujian_id], onDelete: Cascade)
+
+  soal_id Int
+  soal    Soal @relation(fields: [soal_id], references: [soal_id], onDelete: Cascade)
+
+  @@map("soal_ujians")
+}
+
+// ============ PESERTA & HASIL ============
+// Tabel PESERTA_UJIAN (junction table: Ujian <-> Siswa)
+model PesertaUjian {
+  peserta_ujian_id Int         @id @default(autoincrement())
+  status_ujian     StatusUjian @default(BELUM_MULAI)
+  waktu_mulai      DateTime?
+  waktu_selesai    DateTime?
+  is_blocked       Boolean     @default(false)
+  block_reason     String?     @db.Text
+  unlock_code      String?     @unique
+
+  ujian_id Int
+  ujian    Ujian @relation(fields: [ujian_id], references: [ujian_id], onDelete: Cascade)
+
+  siswa_id Int
+  siswa    Siswa @relation(fields: [siswa_id], references: [siswa_id], onDelete: Cascade)
+
+  // Relasi
+  jawabans   Jawaban[] // Peserta punya banyak jawaban
+  hasilUjian HasilUjian? // Peserta punya 1 hasil (jika sudah dinilai)
+
+  @@map("peserta_ujians")
+}
+
+// Tabel JAWABAN
+model Jawaban {
+  jawaban_id          Int      @id @default(autoincrement())
+  jawaban_essay_text  String?  @db.Text
+  jawaban_pg_opsi_ids String?  @db.Text // JSON array: ["1", "3"] untuk multiple choice
+  is_correct          Boolean? // Auto-check untuk pilihan ganda
+  nilai_manual        Float? // Dinilai guru untuk essay
+  createdAt           DateTime @default(now())
+
+  peserta_ujian_id Int
+  pesertaUjian     PesertaUjian @relation(fields: [peserta_ujian_id], references: [peserta_ujian_id], onDelete: Cascade)
+
+  soal_id Int
+  soal    Soal @relation(fields: [soal_id], references: [soal_id], onDelete: Cascade)
+
+  @@map("jawabans")
+}
+
+// Tabel HASIL_UJIAN
+model HasilUjian {
+  hasil_ujian_id Int      @id @default(autoincrement())
+  nilai_akhir    Float // 0-100
+  tanggal_submit DateTime @default(now())
+
+  peserta_ujian_id Int          @unique
+  pesertaUjian     PesertaUjian @relation(fields: [peserta_ujian_id], references: [peserta_ujian_id], onDelete: Cascade)
+
+  @@map("hasil_ujians")
+}
