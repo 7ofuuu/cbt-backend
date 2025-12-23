@@ -3,7 +3,8 @@ const router = express.Router();
 const { verifyToken, checkRole } = require('../middlewares/authMiddleware');
 const { 
   getAllUsers, 
-  createUser, 
+  createUser,
+  batchCreateUsers,
   updateUserRole, 
   toggleUserStatus,
   deleteUser,
@@ -14,6 +15,7 @@ const {
 // Routes untuk Admin - User Management
 router.get('/', verifyToken, checkRole('admin'), getAllUsers);           // Get all users
 router.post('/', verifyToken, checkRole('admin'), createUser);           // Create user
+router.post('/batch', verifyToken, checkRole('admin'), batchCreateUsers); // Batch create users
 router.put('/:id/role', verifyToken, checkRole('admin'), updateUserRole); // Update role
 router.patch('/:id/status', verifyToken, checkRole('admin'), toggleUserStatus); // Toggle status
 router.delete('/:id', verifyToken, checkRole('admin'), deleteUser);      // Delete user

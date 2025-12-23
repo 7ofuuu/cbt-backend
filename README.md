@@ -92,7 +92,7 @@ Each user has a profile table (admins, gurus, or siswas) linked to the main user
 
 ## API Endpoints
 
-Total: **32 endpoints** dengan role-based access control
+Total: **33 endpoints** dengan role-based access control
 
 ### 🔐 Authentication (`/api/auth`)
 
@@ -148,6 +148,7 @@ Total: **32 endpoints** dengan role-based access control
 |--------|----------|-------------|------|
 | GET | `/api/users` | Get semua users | Admin |
 | POST | `/api/users` | Create user baru | Admin |
+| POST | `/api/users/batch` | Batch import users (CSV/Excel) | Admin |
 | PUT | `/api/users/:id/role` | Update role user | Admin |
 | PATCH | `/api/users/:id/status` | Toggle status aktif user | Admin |
 | DELETE | `/api/users/:id` | Delete user | Admin |

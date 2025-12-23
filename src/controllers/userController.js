@@ -309,9 +309,117 @@ const finalisasiNilai = async (req, res) => {
   }
 };
 
+// Batch Create Users (Admin only)
+const batchCreateUsers = async (req, res) => {
+  const { users } = req.body;
+
+  if (!Array.isArray(users) || users.length === 0) {
+    return res.status(400).json({ error: 'Data users harus berupa array dan tidak boleh kosong' });
+  }
+
+  const results = {
+    success: 0,
+    failed: 0,
+    total: users.length,
+    errors: []
+  };
+
+  try {
+    for (const userData of users) {
+      try {
+        const { username, password, role, nama, kelas, tingkat, jurusan } = userData;
+
+        // Validate required fields
+        if (!username || !password || !role || !nama) {
+          results.failed++;
+          results.errors.push({ username, error: 'Data tidak lengkap' });
+          continue;
+        }
+
+        // Validate role-specific fields
+        if (role === 'siswa' && (!kelas || !tingkat || !jurusan)) {
+          results.failed++;
+          results.errors.push({ username, error: 'Data siswa tidak lengkap (kelas, tingkat, jurusan)' });
+          continue;
+        }
+
+        // Check if username already exists
+        const existingUser = await prisma.user.findUnique({
+          where: { username }
+        });
+
+        if (existingUser) {
+          results.failed++;
+          results.errors.push({ username, error: 'Username sudah digunakan' });
+          continue;
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Create user with transaction
+        await prisma.$transaction(async (tx) => {
+          const newUser = await tx.user.create({
+            data: {
+              username,
+              password: hashedPassword,
+              role,
+            },
+          });
+
+          // Create role-specific profile
+          if (role === 'siswa') {
+            await tx.siswa.create({
+              data: {
+                userId: newUser.id,
+                nama_lengkap: nama,
+                kelas,
+                tingkat,
+                jurusan
+              }
+            });
+          } else if (role === 'guru') {
+            await tx.guru.create({
+              data: {
+                userId: newUser.id,
+                nama_lengkap: nama
+              }
+            });
+          } else if (role === 'admin') {
+            await tx.admin.create({
+              data: {
+                userId: newUser.id,
+                nama_lengkap: nama
+              }
+            });
+          }
+        });
+
+        results.success++;
+
+      } catch (error) {
+        results.failed++;
+        results.errors.push({ 
+          username: userData.username, 
+          error: error.message 
+        });
+      }
+    }
+
+    res.status(200).json({
+      message: 'Batch import selesai',
+      ...results
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = { 
   getAllUsers, 
-  createUser, 
+  createUser,
+  batchCreateUsers,
   updateUserRole, 
   toggleUserStatus,
   deleteUser,
