@@ -6,6 +6,7 @@ const soalRoutes = require('./src/routes/soalRoutes');
 const ujianRoutes = require('./src/routes/ujianRoutes');
 const siswaRoutes = require('./src/routes/siswaRoutes');
 const userRoutes = require('./src/routes/userRoutes');
+const activityRoutes = require('./src/routes/activityRoutes');
 
 dotenv.config();
 const app = express();
@@ -19,6 +20,7 @@ app.use('/api/soal', soalRoutes);       // Soal CRUD (Guru)
 app.use('/api/ujian', ujianRoutes);     // Ujian CRUD (Guru)
 app.use('/api/siswa', siswaRoutes);     // Siswa: ujian, jawaban, hasil
 app.use('/api/users', userRoutes);      // User Management (Admin) & Penilaian (Guru)
+app.use('/api/admin/activities', activityRoutes); // Activity Management (Admin)
 
 // Test Route
 app.get('/', (req, res) => {

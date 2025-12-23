@@ -176,6 +176,9 @@ model PesertaUjian {
   status_ujian     StatusUjian @default(BELUM_MULAI)
   waktu_mulai      DateTime?
   waktu_selesai    DateTime?
+  is_blocked       Boolean     @default(false)
+  block_reason     String?     @db.Text
+  unlock_code      String?     @unique
 
   ujian_id Int
   ujian    Ujian @relation(fields: [ujian_id], references: [ujian_id], onDelete: Cascade)
