@@ -124,6 +124,134 @@ Authorization: Bearer <token>
 ### 5. Delete Soal
 **DELETE** `/soal/:id`
 
+### 6. Get Bank Soal (Grouped by Mata Pelajaran, Tingkat, Jurusan)
+**GET** `/soal/bank`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response:**
+```json
+{
+  "bankSoal": [
+    {
+      "mata_pelajaran": "Matematika",
+      "tingkat": "X",
+      "jurusan": "IPA",
+      "jumlah_soal": 25,
+      "jumlah_pg": 20,
+      "jumlah_essay": 5
+    },
+    {
+      "mata_pelajaran": "Fisika",
+      "tingkat": "XI",
+      "jurusan": "IPA",
+      "jumlah_soal": 15,
+      "jumlah_pg": 12,
+      "jumlah_essay": 3
+    }
+  ],
+  "total_soal": 40
+}
+```
+
+**Notes:**
+- Returns soal grouped by mata_pelajaran, tingkat, and jurusan
+- Includes count of total soal, PG soal, and essay soal per group
+- Used for Bank Soal management interface
+
+### 7. Get Soal by Bank (Mata Pelajaran, Tingkat, Jurusan)
+**GET** `/soal/bank/:mataPelajaran/:tingkat/:jurusan`
+
+**Example:** `/soal/bank/Matematika/X/IPA`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response:**
+```json
+{
+  "bankInfo": {
+    "mata_pelajaran": "Matematika",
+    "tingkat": "X",
+    "jurusan": "IPA"
+  },
+  "soals": [
+    {
+      "soal_id": 1,
+      "tipe_soal": "PILIHAN_GANDA_SINGLE",
+      "teks_soal": "Berapa hasil dari 2 + 2?",
+      "mata_pelajaran": "Matematika",
+      "tingkat": "X",
+      "jurusan": "IPA",
+      "created_at": "2025-12-20T10:00:00.000Z",
+      "opsi_jawaban": [
+        {
+          "opsi_id": 1,
+          "label": "A",
+          "teks_opsi": "3",
+          "is_benar": false
+        },
+        {
+          "opsi_id": 2,
+          "label": "B",
+          "teks_opsi": "4",
+          "is_benar": true
+        }
+      ]
+    }
+  ],
+  "stats": {
+    "total_soal": 25,
+    "total_pg_single": 15,
+    "total_pg_multiple": 5,
+    "total_essay": 5
+  }
+}
+```
+
+**Notes:**
+- Returns all soal in a specific bank
+- Includes opsi_jawaban for PG questions
+- Provides statistics about the bank
+
+### 8. Get Available Soal for Ujian
+**GET** `/soal/ujian/:ujianId/tersedia`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response:**
+```json
+{
+  "ujian": {
+    "ujian_id": 1,
+    "nama_ujian": "Ujian Tengah Semester Matematika",
+    "mata_pelajaran": "Matematika",
+    "tingkat": "X",
+    "jurusan": "IPA"
+  },
+  "soal_tersedia": [
+    {
+      "soal_id": 1,
+      "tipe_soal": "PILIHAN_GANDA_SINGLE",
+      "teks_soal": "Berapa hasil dari 2 + 2?",
+      "is_assigned": false
+    },
+    {
+      "soal_id": 2,
+      "tipe_soal": "ESSAY",
+      "teks_soal": "Jelaskan konsep limit",
+      "is_assigned": true
+    }
+  ],
+  "total_tersedia": 25,
+  "total_assigned": 10
+}
+```
+
+**Notes:**
+- Returns soal matching ujian's mata_pelajaran, tingkat, and jurusan
+- `is_assigned` indicates if soal is already added to this ujian
+- Used for adding soal to ujian interface
+
 ---
 
 ## 📝 UJIAN ENDPOINTS (Guru Only)
