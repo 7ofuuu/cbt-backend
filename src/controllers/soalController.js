@@ -232,6 +232,60 @@ const getBankSoal = async (req, res) => {
   }
 };
 
+// Get Soal by Specific Bank (mata_pelajaran, tingkat, jurusan)
+const getSoalByBank = async (req, res) => {
+  const { mataPelajaran, tingkat, jurusan } = req.params;
+  const guru_id = req.user.id;
+
+  try {
+    const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
+    if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
+
+    // Build filter for specific bank
+    const filters = {
+      guru_id: guru.guru_id,
+      mata_pelajaran: mataPelajaran,
+      tingkat: tingkat
+    };
+
+    // Handle jurusan: 'umum' means null in database
+    if (jurusan && jurusan.toLowerCase() !== 'umum') {
+      filters.jurusan = jurusan;
+    } else {
+      filters.jurusan = null;
+    }
+
+    // Get all soals from this specific bank
+    const soals = await prisma.soal.findMany({
+      where: filters,
+      include: {
+        opsiJawabans: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Calculate statistics
+    const stats = {
+      total_soal: soals.length,
+      total_pg_single: soals.filter(s => s.tipe_soal === 'PILIHAN_GANDA_SINGLE').length,
+      total_pg_multiple: soals.filter(s => s.tipe_soal === 'PILIHAN_GANDA_MULTIPLE').length,
+      total_essay: soals.filter(s => s.tipe_soal === 'ESSAY').length
+    };
+
+    res.json({
+      bankInfo: {
+        mata_pelajaran: mataPelajaran,
+        tingkat: tingkat,
+        jurusan: jurusan === 'umum' ? null : jurusan
+      },
+      soals,
+      stats
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 // Get Soal Tersedia untuk Ujian (dengan auto-filter dari ujian)
 const getSoalTersediaUntukUjian = async (req, res) => {
   const { ujian_id } = req.params;
@@ -375,6 +429,7 @@ module.exports = {
   updateSoal, 
   deleteSoal,
   getBankSoal,
+  getSoalByBank,
   getSoalTersediaUntukUjian,
   assignBankSoalToUjian
 };
