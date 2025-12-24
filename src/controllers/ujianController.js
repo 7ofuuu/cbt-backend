@@ -548,6 +548,9 @@ const assignSiswaToUjian = async (req, res) => {
     const filters = { tingkat };
     if (jurusan) filters.jurusan = jurusan;
 
+    console.log(filters);
+    
+
     const siswaList = await prisma.siswa.findMany({ where: filters });
 
     if (siswaList.length === 0) {
