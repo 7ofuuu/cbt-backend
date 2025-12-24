@@ -10,7 +10,8 @@ const createUjian = async (req, res) => {
     tanggal_mulai, 
     tanggal_selesai, 
     durasi_menit, 
-    is_acak_soal 
+    is_acak_soal,
+    auto_assign_siswa = true // Default: otomatis assign siswa
   } = req.body;
   const guru_id = req.user.id;
 
@@ -32,7 +33,61 @@ const createUjian = async (req, res) => {
       }
     });
 
-    res.status(201).json({ message: 'Ujian berhasil dibuat', ujian_id: ujian.ujian_id });
+    let siswaAssigned = 0;
+    let autoAssignError = null;
+
+    // Auto-assign siswa jika diaktifkan
+    if (auto_assign_siswa) {
+      try {
+        const filters = { tingkat };
+        if (jurusan) filters.jurusan = jurusan;
+
+        console.log(`[AUTO-ASSIGN] Searching siswa with filters:`, filters);
+        const siswaList = await prisma.siswa.findMany({ where: filters });
+        console.log(`[AUTO-ASSIGN] Found ${siswaList.length} matching siswa`);
+
+        if (siswaList.length > 0) {
+          const pesertaData = siswaList.map(siswa => ({
+            ujian_id: ujian.ujian_id,
+            siswa_id: siswa.siswa_id,
+            status_ujian: 'BELUM_MULAI',
+            is_blocked: false
+          }));
+
+          const result = await prisma.pesertaUjian.createMany({
+            data: pesertaData,
+            skipDuplicates: true
+          });
+
+          siswaAssigned = result.count;
+          console.log(`[AUTO-ASSIGN] Successfully assigned ${siswaAssigned} siswa to ujian ${ujian.ujian_id}`);
+        } else {
+          console.log(`[AUTO-ASSIGN] No siswa found matching criteria`);
+        }
+      } catch (assignError) {
+        console.error('[AUTO-ASSIGN] Error during auto-assign:', assignError);
+        autoAssignError = assignError.message;
+        // Don't throw - ujian is already created
+      }
+    }
+
+    const response = { 
+      message: 'Ujian berhasil dibuat', 
+      ujian_id: ujian.ujian_id,
+      auto_assign_enabled: auto_assign_siswa,
+      jumlah_siswa_assigned: siswaAssigned
+    };
+
+    // Include warning if auto-assign was attempted but failed
+    if (auto_assign_siswa && siswaAssigned === 0 && !autoAssignError) {
+      response.warning = 'Tidak ada siswa yang cocok dengan kriteria tingkat dan jurusan';
+    }
+    if (autoAssignError) {
+      response.auto_assign_error = autoAssignError;
+      response.warning = 'Auto-assign gagal. Silahkan assign siswa secara manual.';
+    }
+
+    res.status(201).json(response);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -182,7 +237,7 @@ const assignSoalToUjian = async (req, res) => {
         urutan
       }
     });
-
+    
     res.status(201).json({ message: 'Soal berhasil ditambahkan ke ujian', soalUjian });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -557,7 +612,9 @@ const assignSiswaToUjian = async (req, res) => {
     // Create peserta ujian untuk setiap siswa
     const pesertaData = siswaList.map(siswa => ({
       ujian_id,
-      siswa_id: siswa.siswa_id
+      siswa_id: siswa.siswa_id,
+      status_ujian: 'BELUM_MULAI',
+      is_blocked: false
     }));
 
     await prisma.pesertaUjian.createMany({
