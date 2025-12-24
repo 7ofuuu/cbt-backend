@@ -298,10 +298,185 @@ Authorization: Bearer <token>
 }
 ```
 
-### 7. Remove Soal dari Ujian
+### 7. Assign Bank Soal ke Ujian (Batch)
+**POST** `/ujian/assign-bank`
+
+**Body:**
+```json
+{
+  "ujian_id": 1,
+  "mata_pelajaran": "Matematika",
+  "tingkat": "X",
+  "jurusan": "IPA",
+  "bobot_nilai_default": 10,
+  "is_acak": true
+}
+```
+
+**Response:**
+```json
+{
+  "message": "25 soal dari bank berhasil ditambahkan ke ujian",
+  "jumlah_soal": 25,
+  "is_acak": true
+}
+```
+
+**Notes:**
+- Assigns all soal from specified bank (mata_pelajaran, tingkat, jurusan) to ujian
+- `bobot_nilai_default` applies to all soal (default: 10)
+- `is_acak`: if true, randomizes the order of soal
+- Automatically sets urutan based on existing soal in ujian
+- Skips duplicates if soal already assigned
+
+### 8. Remove Soal dari Ujian
 **DELETE** `/ujian/remove-soal/:soal_ujian_id`
 
-### 8. Assign Siswa ke Ujian
+**Notes:**
+- Only removes the relationship (soalUjian), NOT the soal from master data
+- Soal remains in bank and can be re-assigned
+
+### 9. Remove Multiple Soal dari Ujian (Batch)
+**DELETE** `/ujian/remove-multiple-soal`
+
+**Body:**
+```json
+{
+  "ujian_id": 1,
+  "soal_ujian_ids": [1, 2, 3, 4, 5]
+}
+```
+
+**Response:**
+```json
+{
+  "message": "5 soal berhasil dihapus dari ujian",
+  "jumlah_dihapus": 5
+}
+```
+
+**Notes:**
+- Batch delete multiple soal from ujian
+- Validates all soal_ujian_ids belong to the specified ujian
+- Only removes relationships, not master data
+
+### 10. Remove Bank dari Ujian
+**DELETE** `/ujian/remove-bank`
+
+**Body:**
+```json
+{
+  "ujian_id": 1,
+  "mata_pelajaran": "Matematika",
+  "tingkat": "X",
+  "jurusan": "IPA"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "15 soal dari bank Matematika-X-IPA berhasil dihapus dari ujian",
+  "jumlah_dihapus": 15
+}
+```
+
+**Notes:**
+- Removes all soal from specified bank (mata_pelajaran + tingkat + jurusan)
+- **jurusan is REQUIRED**
+- Useful for removing entire bank assignment at once
+
+### 11. Clear All Soal dari Ujian
+**DELETE** `/ujian/:ujianId/clear-soal`
+
+**Response:**
+```json
+{
+  "message": "Semua soal berhasil dihapus dari ujian",
+  "jumlah_dihapus": 25
+}
+```
+
+**Notes:**
+- Removes ALL soal from ujian (reset)
+- Useful for starting fresh when reconfiguring ujian
+
+### 12. Get Soal Ujian Grouped by Bank
+**GET** `/ujian/:ujianId/soal-by-bank`
+
+**Response:**
+```json
+{
+  "ujian_id": 1,
+  "total_bank": 2,
+  "total_soal": 25,
+  "banks": [
+    {
+      "bank": "Matematika-X-IPA",
+      "mata_pelajaran": "Matematika",
+      "tingkat": "X",
+      "jurusan": "IPA",
+      "jumlah_soal": 15,
+      "total_bobot": 150,
+      "soals": [
+        {
+          "soal_ujian_id": 1,
+          "soal_id": 5,
+          "urutan": 1,
+          "bobot_nilai": 10,
+          "tipe_soal": "PILIHAN_GANDA_SINGLE",
+          "teks_soal": "Berapa hasil dari 2 + 2?",
+          "opsi_jawaban": [
+            {
+              "opsi_id": 1,
+              "label": "A",
+              "teks_opsi": "3",
+              "is_benar": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Notes:**
+- Returns soal grouped by their bank origin
+- Includes complete soal details with opsi_jawaban
+- Summary includes jumlah_soal and total_bobot per bank
+- Useful for ujian management interface
+
+### 13. Update Bobot Multiple Soal
+**PUT** `/ujian/update-bobot-multiple`
+
+**Body:**
+```json
+{
+  "ujian_id": 1,
+  "updates": [
+    { "soal_ujian_id": 1, "bobot_nilai": 15 },
+    { "soal_ujian_id": 2, "bobot_nilai": 20 },
+    { "soal_ujian_id": 3, "bobot_nilai": 10 }
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Bobot 3 soal berhasil diupdate",
+  "jumlah_updated": 3
+}
+```
+
+**Notes:**
+- Batch update bobot_nilai for multiple soal
+- **NO ownership validation** - any guru can update (for correction purposes)
+- Validates all soal_ujian_ids belong to specified ujian_id
+- More efficient than updating one by one
+
+### 14. Assign Siswa ke Ujian
 **POST** `/ujian/assign-siswa`
 
 **Body:**
