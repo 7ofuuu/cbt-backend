@@ -263,7 +263,167 @@ Authorization: Bearer <token>
 
 ---
 
-## 👥 USER MANAGEMENT ENDPOINTS
+## � ADMIN - AKTIVITAS (MONITORING) ENDPOINTS
+
+### Admin Only - Monitor Ujian & Peserta
+
+#### 1. Get All Activities (Exam List)
+**GET** `/admin/activities`
+
+**Query Parameters:**
+- `jurusan` - Filter by jurusan (IPA/IPS/Bahasa) or 'all'
+- `kelas` - Filter by tingkat (X/XI/XII) or 'all'
+- `status` - Filter participant status (ON_PROGRESS/SUBMITTED/BLOCKED) or 'all'
+- `jenis_ujian` - Filter by exam type ('Ujian Akhir Semester'/'Ujian Tengah Semester') or 'all'
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "ujian_id": 1,
+      "nama_ujian": "Ujian Akhir Semester Matematika",
+      "mata_pelajaran": "Matematika",
+      "jurusan": "IPA",
+      "tingkat": "XII",
+      "jenis_ujian": "Ujian Akhir Semester",
+      "peserta_count": 25,
+      "status": "Sedang Berlangsung",
+      "tanggal_mulai": "2025-12-24T08:00:00.000Z",
+      "tanggal_selesai": "2025-12-24T10:00:00.000Z",
+      "durasi_menit": 120
+    }
+  ]
+}
+```
+
+**Status Values:**
+- `Belum Mulai` - Exam hasn't started yet
+- `Sedang Berlangsung` - Exam is currently active
+- `Selesai` - Exam has ended
+
+#### 2. Get Exam Participants Detail
+**GET** `/admin/activities/:ujianId/participants`
+
+**Query Parameters:**
+- `jurusan` - Filter participants by jurusan
+- `kelas` - Filter participants by kelas
+- `status` - Filter by participant status (ON_PROGRESS/SUBMITTED/BLOCKED)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "ujian": {
+      "ujian_id": 1,
+      "nama_ujian": "Ujian Akhir Semester Matematika",
+      "mata_pelajaran": "Matematika",
+      "tingkat": "XII",
+      "jurusan": "IPA"
+    },
+    "peserta": [
+      {
+        "peserta_ujian_id": 15,
+        "nama": "Budi Santoso",
+        "tingkat": "XII",
+        "kelas": "IPA 01",
+        "mata_pelajaran": "Matematika",
+        "status": "On Progress",
+        "is_blocked": false,
+        "block_reason": null,
+        "unlock_code": null,
+        "waktu_mulai": "2025-12-24T08:05:00.000Z",
+        "waktu_selesai": null
+      }
+    ]
+  }
+}
+```
+
+**Status Values:**
+- `Belum Mulai` - Student hasn't started
+- `On Progress` - Currently working on exam
+- `Submitted` - Exam completed
+- `Blocked` - Student is blocked
+
+#### 3. Get Participant Detail
+**GET** `/admin/activities/participant/:pesertaUjianId`
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "peserta_ujian_id": 15,
+    "nama": "Budi Santoso",
+    "tingkat": "XII",
+    "kelas": "IPA 01",
+    "mata_pelajaran": "Matematika",
+    "status": "Blocked",
+    "is_blocked": true,
+    "block_reason": "Keluar dari aplikasi sebelum ujian selesai",
+    "unlock_code": "ABC123",
+    "waktu_mulai": "2025-12-24T08:05:00.000Z",
+    "waktu_selesai": null
+  }
+}
+```
+
+#### 4. Block Participant
+**POST** `/admin/activities/:pesertaUjianId/block`
+
+**Body:**
+```json
+{
+  "block_reason": "Keluar dari aplikasi sebelum ujian selesai"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Peserta berhasil diblokir"
+}
+```
+
+#### 5. Generate Unlock Code
+**POST** `/admin/activities/:pesertaUjianId/generate-unlock`
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Kode unlock berhasil di-generate",
+  "data": {
+    "unlock_code": "X7K9P2"
+  }
+}
+```
+
+#### 6. Unblock Participant
+**POST** `/admin/activities/:pesertaUjianId/unblock`
+
+**Body:**
+```json
+{
+  "unlock_code": "X7K9P2"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Peserta berhasil di-unblock"
+}
+```
+
+---
+
+## �👥 USER MANAGEMENT ENDPOINTS
 
 ### Admin Only
 
@@ -334,6 +494,7 @@ Authorization: Bearer <token>
 | `/soal/*` | ❌ | ✅ | ❌ |
 | `/ujian/*` | ❌ | ✅ | ❌ |
 | `/siswa/*` | ❌ | ❌ | ✅ |
+| `/admin/activities/*` | ✅ | ❌ | ❌ |
 | `/users` (User Mgmt) | ✅ | ❌ | ❌ |
 | `/users/nilai` | ❌ | ✅ | ❌ |
 
