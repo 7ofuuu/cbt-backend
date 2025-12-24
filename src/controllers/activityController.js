@@ -27,6 +27,21 @@ exports.getAllActivities = async (req, res) => {
     if (kelas && kelas !== 'all') {
       whereClause.tingkat = kelas;
     }
+    
+    // Filter by jenis_ujian (exam type)
+    if (jenis_ujian && jenis_ujian !== 'all') {
+      if (jenis_ujian === 'Ujian Akhir Semester') {
+        whereClause.nama_ujian = {
+          contains: 'akhir',
+          mode: 'insensitive'
+        };
+      } else if (jenis_ujian === 'Ujian Tengah Semester') {
+        whereClause.nama_ujian = {
+          contains: 'tengah',
+          mode: 'insensitive'
+        };
+      }
+    }
 
     // Get all exams with their participants
     const ujians = await prisma.ujian.findMany({
@@ -67,6 +82,14 @@ exports.getAllActivities = async (req, res) => {
       if (ujian.nama_ujian.toLowerCase().includes('akhir')) {
         jenisUjian = 'Ujian Akhir Semester';
       }
+      
+      // Determine exam status based on current time
+      let examStatus = 'Belum Mulai';
+      if (now >= mulai && now <= selesai) {
+        examStatus = 'Sedang Berlangsung';
+      } else if (now > selesai) {
+        examStatus = 'Selesai';
+      }
 
       return {
         ujian_id: ujian.ujian_id,
@@ -76,7 +99,7 @@ exports.getAllActivities = async (req, res) => {
         tingkat: ujian.tingkat,
         jenis_ujian: jenisUjian,
         peserta_count: ujian.pesertaUjians.length,
-        status: now < mulai ? 'Aktif' : now > selesai ? 'Aktif' : 'Aktif',
+        status: examStatus,
         tanggal_mulai: ujian.tanggal_mulai,
         tanggal_selesai: ujian.tanggal_selesai,
         durasi_menit: ujian.durasi_menit
