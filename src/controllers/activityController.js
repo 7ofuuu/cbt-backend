@@ -2,11 +2,11 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-// Helper function to generate random unlock code
+// Helper function to generate random unlock code (5 characters)
 const generateUnlockCode = () => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let code = '';
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 5; i++) {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return code;
@@ -202,9 +202,11 @@ exports.getExamParticipants = async (req, res) => {
         peserta_ujian_id: peserta.peserta_ujian_id,
         nama: peserta.siswa.nama_lengkap,
         tingkat: peserta.siswa.tingkat,
-        kelas: `${peserta.siswa.jurusan} ${peserta.siswa.kelas}`,
+        jurusan: peserta.siswa.jurusan,
+        kelas: peserta.siswa.kelas,
         mata_pelajaran: ujian.mata_pelajaran,
         status: statusLabel,
+        status_ujian: peserta.status_ujian,
         is_blocked: peserta.is_blocked,
         block_reason: peserta.block_reason,
         unlock_code: peserta.unlock_code,

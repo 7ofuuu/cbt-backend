@@ -269,9 +269,25 @@ Authorization: Bearer <token>
   "tanggal_mulai": "2025-01-15T08:00:00.000Z",
   "tanggal_selesai": "2025-01-15T12:00:00.000Z",
   "durasi_menit": 120,
-  "is_acak_soal": true
+  "is_acak_soal": true,
+  "auto_assign_siswa": true
 }
 ```
+
+**Response:**
+```json
+{
+  "message": "Ujian berhasil dibuat",
+  "ujian_id": 1,
+  "auto_assign_enabled": true,
+  "jumlah_siswa_assigned": 25
+}
+```
+
+**Notes:**
+- `auto_assign_siswa` (optional, default: `true`) - Otomatis assign siswa berdasarkan tingkat & jurusan
+- Jika `true`, semua siswa dengan tingkat dan jurusan yang cocok akan langsung di-assign
+- Jika `false`, guru harus manual assign siswa menggunakan endpoint `/ujian/assign-siswa`
 
 ### 2. Get All Ujian
 **GET** `/ujian`
