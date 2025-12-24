@@ -171,4 +171,210 @@ const deleteSoal = async (req, res) => {
   }
 };
 
-module.exports = { createSoal, getSoals, getSoalById, updateSoal, deleteSoal };
+// Get Bank Soal (Grouped by Mata Pelajaran, Tingkat, Jurusan)
+const getBankSoal = async (req, res) => {
+  const guru_id = req.user.id;
+
+  try {
+    const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
+    if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
+
+    // Get all soals grouped
+    const soals = await prisma.soal.findMany({
+      where: { guru_id: guru.guru_id },
+      select: {
+        soal_id: true,
+        mata_pelajaran: true,
+        tingkat: true,
+        jurusan: true,
+        tipe_soal: true
+      }
+    });
+
+    // Group by mata_pelajaran + tingkat + jurusan
+    const bankSoalMap = new Map();
+
+    soals.forEach(soal => {
+      const key = `${soal.mata_pelajaran}|${soal.tingkat}|${soal.jurusan || 'umum'}`;
+      
+      if (!bankSoalMap.has(key)) {
+        bankSoalMap.set(key, {
+          mata_pelajaran: soal.mata_pelajaran,
+          tingkat: soal.tingkat,
+          jurusan: soal.jurusan || null,
+          soal_ids: [],
+          jumlah_soal: 0,
+          jumlah_pg: 0,
+          jumlah_essay: 0
+        });
+      }
+
+      const grup = bankSoalMap.get(key);
+      grup.soal_ids.push(soal.soal_id);
+      grup.jumlah_soal++;
+      
+      if (soal.tipe_soal === 'ESSAY') {
+        grup.jumlah_essay++;
+      } else {
+        grup.jumlah_pg++;
+      }
+    });
+
+    const bankSoal = Array.from(bankSoalMap.values());
+
+    res.json({ 
+      bankSoal,
+      total_grup: bankSoal.length,
+      total_soal: soals.length
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get Soal Tersedia untuk Ujian (dengan auto-filter dari ujian)
+const getSoalTersediaUntukUjian = async (req, res) => {
+  const { ujian_id } = req.params;
+  const guru_id = req.user.id;
+
+  try {
+    const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
+    if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
+
+    // Get ujian data
+    const ujian = await prisma.ujian.findFirst({
+      where: { ujian_id: parseInt(ujian_id), guru_id: guru.guru_id },
+      include: {
+        soalUjians: { select: { soal_id: true } }
+      }
+    });
+
+    if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
+
+    // Auto-filter berdasarkan ujian
+    const filters = {
+      guru_id: guru.guru_id,
+      mata_pelajaran: ujian.mata_pelajaran,
+      tingkat: ujian.tingkat
+    };
+    
+    if (ujian.jurusan) filters.jurusan = ujian.jurusan;
+
+    // Get all matching soals
+    const soals = await prisma.soal.findMany({
+      where: filters,
+      select: {
+        soal_id: true,
+        tipe_soal: true
+      }
+    });
+
+    // Get soal yang sudah di-assign
+    const soalIdsYangSudahDipakai = ujian.soalUjians.map(su => su.soal_id);
+    const soalIdsTersedia = soals
+      .filter(s => !soalIdsYangSudahDipakai.includes(s.soal_id))
+      .map(s => s.soal_id);
+
+    const jumlahPG = soals.filter(s => s.tipe_soal !== 'ESSAY' && !soalIdsYangSudahDipakai.includes(s.soal_id)).length;
+    const jumlahEssay = soals.filter(s => s.tipe_soal === 'ESSAY' && !soalIdsYangSudahDipakai.includes(s.soal_id)).length;
+
+    res.json({
+      ujian: {
+        ujian_id: ujian.ujian_id,
+        nama_ujian: ujian.nama_ujian,
+        mata_pelajaran: ujian.mata_pelajaran,
+        tingkat: ujian.tingkat,
+        jurusan: ujian.jurusan
+      },
+      bank_soal: {
+        soal_ids: soalIdsTersedia,
+        jumlah_tersedia: soalIdsTersedia.length,
+        jumlah_pg: jumlahPG,
+        jumlah_essay: jumlahEssay,
+        sudah_dipakai: soalIdsYangSudahDipakai.length
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Assign All Soal dari Bank ke Ujian
+const assignBankSoalToUjian = async (req, res) => {
+  const { ujian_id, mata_pelajaran, tingkat, jurusan } = req.body;
+  const guru_id = req.user.id;
+
+  try {
+    const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
+    if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
+
+    // Check ownership ujian
+    const ujian = await prisma.ujian.findFirst({
+      where: { ujian_id, guru_id: guru.guru_id },
+      include: {
+        soalUjians: {
+          orderBy: { urutan: 'desc' },
+          take: 1
+        }
+      }
+    });
+    if (!ujian) return res.status(403).json({ error: 'Ujian tidak ditemukan atau bukan milik Anda' });
+
+    // Get all soals dari bank yang dipilih
+    const filters = {
+      guru_id: guru.guru_id,
+      mata_pelajaran,
+      tingkat
+    };
+    if (jurusan) filters.jurusan = jurusan;
+
+    const soals = await prisma.soal.findMany({
+      where: filters,
+      select: { soal_id: true }
+    });
+
+    if (soals.length === 0) {
+      return res.status(404).json({ error: 'Tidak ada soal di bank tersebut' });
+    }
+
+    // Get last urutan
+    let currentUrutan = ujian.soalUjians.length > 0 ? ujian.soalUjians[0].urutan : 0;
+
+    // Prepare data untuk batch insert
+    const soalUjianData = soals.map(soal => ({
+      ujian_id,
+      soal_id: soal.soal_id,
+      bobot_nilai: 10, // Default, bisa diubah nanti
+      urutan: ++currentUrutan
+    }));
+
+    // Batch insert
+    const result = await prisma.soalUjian.createMany({
+      data: soalUjianData,
+      skipDuplicates: true
+    });
+
+    res.status(201).json({
+      message: `${result.count} soal berhasil ditambahkan ke ujian`,
+      bank_soal: {
+        mata_pelajaran,
+        tingkat,
+        jurusan: jurusan || 'umum'
+      },
+      jumlah_soal_ditambahkan: result.count
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+module.exports = { 
+  createSoal, 
+  getSoals, 
+  getSoalById, 
+  updateSoal, 
+  deleteSoal,
+  getBankSoal,
+  getSoalTersediaUntukUjian,
+  assignBankSoalToUjian
+};
