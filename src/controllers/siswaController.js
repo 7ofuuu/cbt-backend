@@ -1,4 +1,5 @@
 const prisma = require('../config/db');
+const activityLogService = require('../services/activityLogService');
 
 // Get Ujian yang Di-assign ke Siswa
 const getMyUjians = async (req, res) => {
@@ -182,9 +183,23 @@ const startUjian = async (req, res) => {
       where: { peserta_ujian_id: parseInt(peserta_ujian_id) }
     });
 
+    // Debug logging
+    console.log('=== START UJIAN DEBUG ===');
+    console.log('Ujian ID:', updatedPeserta.ujian.ujian_id);
+    console.log('Total soalUjians:', updatedPeserta.ujian.soalUjians?.length || 0);
+    if (updatedPeserta.ujian.soalUjians && updatedPeserta.ujian.soalUjians.length > 0) {
+      console.log('First soal:', updatedPeserta.ujian.soalUjians[0]);
+    }
+    console.log('========================');
+
     // Prepare soal list (hide correct answers)
     const soalList = updatedPeserta.ujian.soalUjians.map(su => {
       const jawaban = existingJawabans.find(j => j.soal_id === su.soal_id);
+      
+      // Check if soal has multiple choice options
+      const isPilihanGanda = su.soal.tipe_soal === 'PILIHAN_GANDA' || 
+                            su.soal.tipe_soal === 'PILIHAN_GANDA_SINGLE' || 
+                            su.soal.tipe_soal === 'PILIHAN_GANDA_MULTIPLE';
       
       return {
         soal_ujian_id: su.soal_ujian_id,
@@ -195,7 +210,7 @@ const startUjian = async (req, res) => {
           tipe_soal: su.soal.tipe_soal,
           teks_soal: su.soal.teks_soal,
           soal_gambar: su.soal.soal_gambar,
-          opsi_jawaban: su.soal.tipe_soal === 'PILIHAN_GANDA' 
+          opsi_jawaban: isPilihanGanda && su.soal.opsiJawabans
             ? su.soal.opsiJawabans.map(opsi => ({
                 opsi_id: opsi.opsi_id,
                 label_opsi: opsi.label_opsi,
@@ -206,10 +221,26 @@ const startUjian = async (req, res) => {
         },
         jawaban_saya: jawaban ? {
           jawaban_id: jawaban.jawaban_id,
-          opsi_jawaban_id: jawaban.opsi_jawaban_id,
-          teks_jawaban: jawaban.teks_jawaban
+          opsi_jawaban_id: jawaban.jawaban_pg_opsi_ids ? parseInt(jawaban.jawaban_pg_opsi_ids.split(',')[0]) : null,
+          opsi_jawaban_ids: jawaban.jawaban_pg_opsi_ids ? jawaban.jawaban_pg_opsi_ids.split(',').map(id => parseInt(id)) : null,
+          teks_jawaban: jawaban.jawaban_essay_text
         } : null
       };
+    });
+
+    // Log activity
+    await activityLogService.createLog({
+      user_id: siswa.userId,
+      peserta_ujian_id: updatedPeserta.peserta_ujian_id,
+      activity_type: 'START_UJIAN',
+      description: `Memulai ujian: ${updatedPeserta.ujian.nama_ujian}`,
+      ip_address: activityLogService.getIpAddress(req),
+      user_agent: activityLogService.getUserAgent(req),
+      metadata: {
+        ujian_id: updatedPeserta.ujian_id,
+        total_soal: soalList.length,
+        waktu_mulai: updatedPeserta.waktu_mulai
+      }
     });
 
     res.json({
@@ -236,7 +267,7 @@ const startUjian = async (req, res) => {
 
 // Submit Jawaban (per soal)
 const submitJawaban = async (req, res) => {
-  const { peserta_ujian_id, soal_id, opsi_jawaban_id, teks_jawaban } = req.body;
+  const { peserta_ujian_id, soal_id, opsi_jawaban_id, opsi_jawaban_ids, teks_jawaban } = req.body;
   const siswa_user_id = req.user.id;
 
   try {
@@ -267,7 +298,7 @@ const submitJawaban = async (req, res) => {
       });
     }
 
-    // Get soal to determine correctness (for PILIHAN_GANDA)
+    // Get soal to determine correctness
     const soal = await prisma.soal.findUnique({
       where: { soal_id: parseInt(soal_id) },
       include: { opsiJawabans: true }
@@ -286,33 +317,76 @@ const submitJawaban = async (req, res) => {
     });
 
     let isCorrect = null;
-    if (soal.tipe_soal === 'PILIHAN_GANDA' && opsi_jawaban_id) {
-      const opsiBenar = soal.opsiJawabans.find(o => o.is_benar);
-      isCorrect = opsiBenar?.opsi_id === parseInt(opsi_jawaban_id);
+    let jawabanPgOpsiIds = null;
+    let jawabanEssayText = null;
+
+    // Handle different question types
+    if (soal.tipe_soal === 'PILIHAN_GANDA_SINGLE' || soal.tipe_soal === 'PILIHAN_GANDA') {
+      // Single choice - store as string with single ID
+      if (opsi_jawaban_id) {
+        jawabanPgOpsiIds = opsi_jawaban_id.toString();
+        const opsiBenar = soal.opsiJawabans.find(o => o.is_benar);
+        isCorrect = opsiBenar?.opsi_id === parseInt(opsi_jawaban_id);
+      }
+    } else if (soal.tipe_soal === 'PILIHAN_GANDA_MULTIPLE') {
+      // Multiple choice - store as comma-separated string
+      if (opsi_jawaban_ids && Array.isArray(opsi_jawaban_ids) && opsi_jawaban_ids.length > 0) {
+        jawabanPgOpsiIds = opsi_jawaban_ids.join(',');
+        console.log('📝 Multiple choice saved:', jawabanPgOpsiIds);
+      }
+    } else if (soal.tipe_soal === 'ESSAY') {
+      // Essay - store in jawaban_essay_text
+      jawabanEssayText = teks_jawaban || null;
     }
+
+    // Check if all fields are empty (user wants to delete answer)
+    const isEmptyAnswer = !jawabanPgOpsiIds && !jawabanEssayText;
 
     let jawaban;
     if (existingJawaban) {
-      // Update existing
-      jawaban = await prisma.jawaban.update({
-        where: { jawaban_id: existingJawaban.jawaban_id },
-        data: {
-          opsi_jawaban_id: opsi_jawaban_id ? parseInt(opsi_jawaban_id) : null,
-          teks_jawaban: teks_jawaban || null,
-          is_correct: isCorrect
-        }
-      });
+      if (isEmptyAnswer) {
+        // Delete existing answer if user clears/unselects everything
+        await prisma.jawaban.delete({
+          where: { jawaban_id: existingJawaban.jawaban_id }
+        });
+        console.log(`🗑️ Jawaban dihapus untuk soal ${soal_id}`);
+        
+        return res.json({ 
+          message: 'Jawaban berhasil dihapus',
+          deleted: true,
+          soal_id: parseInt(soal_id)
+        });
+      } else {
+        // Update existing answer
+        jawaban = await prisma.jawaban.update({
+          where: { jawaban_id: existingJawaban.jawaban_id },
+          data: {
+            jawaban_pg_opsi_ids: jawabanPgOpsiIds,
+            jawaban_essay_text: jawabanEssayText
+          }
+        });
+        console.log(`✏️ Jawaban diupdate untuk soal ${soal_id}`);
+      }
     } else {
-      // Create new
+      if (isEmptyAnswer) {
+        // Don't create empty answer
+        return res.json({ 
+          message: 'Tidak ada jawaban untuk disimpan',
+          empty: true,
+          soal_id: parseInt(soal_id)
+        });
+      }
+      
+      // Create new answer
       jawaban = await prisma.jawaban.create({
         data: {
           peserta_ujian_id: parseInt(peserta_ujian_id),
           soal_id: parseInt(soal_id),
-          opsi_jawaban_id: opsi_jawaban_id ? parseInt(opsi_jawaban_id) : null,
-          teks_jawaban: teks_jawaban || null,
-          is_correct: isCorrect
+          jawaban_pg_opsi_ids: jawabanPgOpsiIds,
+          jawaban_essay_text: jawabanEssayText
         }
       });
+      console.log(`✅ Jawaban baru dibuat untuk soal ${soal_id}`);
     }
 
     res.json({ 
@@ -320,12 +394,12 @@ const submitJawaban = async (req, res) => {
       jawaban: {
         jawaban_id: jawaban.jawaban_id,
         soal_id: jawaban.soal_id,
-        opsi_jawaban_id: jawaban.opsi_jawaban_id,
-        teks_jawaban: jawaban.teks_jawaban
-        // Don't return is_correct to prevent cheating
+        jawaban_pg_opsi_ids: jawaban.jawaban_pg_opsi_ids,
+        jawaban_essay_text: jawaban.jawaban_essay_text
       }
     });
   } catch (error) {
+    console.error('Error submit jawaban:', error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -391,20 +465,67 @@ const finishUjian = async (req, res) => {
     // Auto-calculate score
     let totalNilai = 0;
     let totalBobot = 0;
+    let hasEssay = false;
 
     for (const soalUjian of pesertaUjian.ujian.soalUjians) {
       totalBobot += soalUjian.bobot_nilai;
       
       const jawaban = pesertaUjian.jawabans.find(j => j.soal_id === soalUjian.soal_id);
       
-      if (jawaban && jawaban.is_correct) {
-        totalNilai += soalUjian.bobot_nilai;
+      if (jawaban && jawaban.soal) {
+        const soal = jawaban.soal;
+        
+        // Check essay questions
+        if (soal.tipe_soal === 'ESSAY') {
+          hasEssay = true;
+          // Essay will be graded manually by guru, skip for now
+          continue;
+        }
+        
+        // Check pilihan ganda (single or multiple)
+        if (soal.tipe_soal === 'PILIHAN_GANDA_SINGLE' || soal.tipe_soal === 'PILIHAN_GANDA') {
+          // Get the correct answer
+          const opsiBenar = soal.opsiJawabans.find(o => o.is_benar);
+          
+          if (opsiBenar && jawaban.jawaban_pg_opsi_ids) {
+            const jawabanOpsiId = parseInt(jawaban.jawaban_pg_opsi_ids);
+            if (jawabanOpsiId === opsiBenar.opsi_id) {
+              totalNilai += soalUjian.bobot_nilai;
+              console.log(`✅ Soal ${soal.soal_id}: BENAR (${opsiBenar.opsi_id})`);
+            } else {
+              console.log(`❌ Soal ${soal.soal_id}: SALAH (jawaban: ${jawabanOpsiId}, benar: ${opsiBenar.opsi_id})`);
+            }
+          }
+        } else if (soal.tipe_soal === 'PILIHAN_GANDA_MULTIPLE') {
+          // Get all correct answers
+          const opsiBenarIds = soal.opsiJawabans
+            .filter(o => o.is_benar)
+            .map(o => o.opsi_id)
+            .sort();
+          
+          if (jawaban.jawaban_pg_opsi_ids) {
+            const jawabanIds = jawaban.jawaban_pg_opsi_ids
+              .split(',')
+              .map(id => parseInt(id.trim()))
+              .sort();
+            
+            // Check if arrays are equal
+            const isCorrect = JSON.stringify(opsiBenarIds) === JSON.stringify(jawabanIds);
+            if (isCorrect) {
+              totalNilai += soalUjian.bobot_nilai;
+              console.log(`✅ Soal ${soal.soal_id}: BENAR (multiple choice)`);
+            } else {
+              console.log(`❌ Soal ${soal.soal_id}: SALAH (jawaban: ${jawabanIds}, benar: ${opsiBenarIds})`);
+            }
+          }
+        }
       }
-      // Essay questions (nilai_manual) will be graded later by guru
     }
 
     // Calculate final score (0-100)
     const nilaiAkhir = totalBobot > 0 ? (totalNilai / totalBobot) * 100 : 0;
+
+    console.log(`📊 Nilai Akhir: ${nilaiAkhir.toFixed(2)} (${totalNilai}/${totalBobot})`);
 
     // Create hasil ujian
     const hasil = await prisma.hasilUjian.create({
@@ -415,18 +536,30 @@ const finishUjian = async (req, res) => {
       }
     });
 
-    // Update status to DINILAI if no essay questions
-    const hasEssay = pesertaUjian.ujian.soalUjians.some(su => {
-      const soal = pesertaUjian.jawabans.find(j => j.soal_id === su.soal_id)?.soal;
-      return soal?.tipe_soal === 'ESSAY';
-    });
-
     if (!hasEssay) {
       await prisma.pesertaUjian.update({
         where: { peserta_ujian_id: parseInt(peserta_ujian_id) },
         data: { status_ujian: 'DINILAI' }
       });
     }
+
+    // Log activity
+    await activityLogService.createLog({
+      user_id: siswa.userId,
+      peserta_ujian_id: parseInt(peserta_ujian_id),
+      activity_type: 'FINISH_UJIAN',
+      description: `Menyelesaikan ujian: ${pesertaUjian.ujian.nama_ujian}`,
+      ip_address: activityLogService.getIpAddress(req),
+      user_agent: activityLogService.getUserAgent(req),
+      metadata: {
+        ujian_id: pesertaUjian.ujian_id,
+        nilai_akhir: nilaiAkhir,
+        total_soal: pesertaUjian.ujian.soalUjians.length,
+        soal_terjawab: pesertaUjian.jawabans.length,
+        has_essay: hasEssay,
+        waktu_selesai: new Date()
+      }
+    });
 
     res.json({
       message: 'Ujian berhasil diselesaikan',

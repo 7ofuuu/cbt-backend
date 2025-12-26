@@ -1472,3 +1472,193 @@ node index.js
 ---
 
 **Happy Testing! 🎉**
+---
+
+## 📊 ACTIVITY LOG ENDPOINTS (Admin & Guru Only)
+
+### 1. Get All Activity Logs
+**GET** `/activity-logs`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Query Parameters:**
+- `activity_type` (optional): Filter by activity type (LOGIN, START_UJIAN, FINISH_UJIAN, AUTO_FINISH_UJIAN, BLOCKED, UNBLOCKED)
+- `user_id` (optional): Filter by user ID
+- `peserta_ujian_id` (optional): Filter by peserta ujian ID
+- `search` (optional): Search in description field
+- `limit` (optional): Limit number of results (default: 100)
+
+**Example:** `/activity-logs?activity_type=START_UJIAN&limit=50`
+
+**Response:**
+```json
+{
+  "logs": [
+    {
+      "log_id": 1,
+      "user_id": 5,
+      "peserta_ujian_id": 10,
+      "activity_type": "START_UJIAN",
+      "description": "Siswa memulai ujian Matematika UTS",
+      "ip_address": "192.168.1.100",
+      "user_agent": "Mozilla/5.0...",
+      "metadata": {
+        "ujian_id": 3,
+        "total_soal": 20,
+        "waktu_mulai": "2025-12-27T10:00:00.000Z"
+      },
+      "created_at": "2025-12-27T10:00:00.000Z"
+    }
+  ],
+  "total": 1
+}
+```
+
+### 2. Get Activity Logs by User
+**GET** `/activity-logs/user/:userId`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Query Parameters:**
+- `limit` (optional): Limit number of results (default: 50)
+
+**Example:** `/activity-logs/user/5?limit=20`
+
+**Response:**
+```json
+{
+  "user_id": 5,
+  "logs": [
+    {
+      "log_id": 1,
+      "user_id": 5,
+      "peserta_ujian_id": 10,
+      "activity_type": "LOGIN",
+      "description": "User berhasil login",
+      "ip_address": "192.168.1.100",
+      "user_agent": "Mozilla/5.0...",
+      "metadata": {
+        "username": "siswa1",
+        "role": "siswa"
+      },
+      "created_at": "2025-12-27T09:55:00.000Z"
+    },
+    {
+      "log_id": 2,
+      "user_id": 5,
+      "peserta_ujian_id": 10,
+      "activity_type": "START_UJIAN",
+      "description": "Siswa memulai ujian Matematika UTS",
+      "ip_address": "192.168.1.100",
+      "created_at": "2025-12-27T10:00:00.000Z"
+    }
+  ],
+  "total": 2
+}
+```
+
+### 3. Get Activity Logs by Peserta Ujian
+**GET** `/activity-logs/peserta-ujian/:pesertaUjianId`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Query Parameters:**
+- `limit` (optional): Limit number of results (default: 50)
+
+**Example:** `/activity-logs/peserta-ujian/10`
+
+**Response:**
+```json
+{
+  "peserta_ujian_id": 10,
+  "logs": [
+    {
+      "log_id": 2,
+      "user_id": 5,
+      "peserta_ujian_id": 10,
+      "activity_type": "START_UJIAN",
+      "description": "Siswa memulai ujian Matematika UTS",
+      "ip_address": "192.168.1.100",
+      "metadata": {
+        "ujian_id": 3,
+        "total_soal": 20,
+        "waktu_mulai": "2025-12-27T10:00:00.000Z"
+      },
+      "created_at": "2025-12-27T10:00:00.000Z"
+    },
+    {
+      "log_id": 3,
+      "user_id": 5,
+      "peserta_ujian_id": 10,
+      "activity_type": "FINISH_UJIAN",
+      "description": "Siswa menyelesaikan ujian Matematika UTS",
+      "ip_address": "192.168.1.100",
+      "metadata": {
+        "ujian_id": 3,
+        "nilai_akhir": 85,
+        "total_soal": 20,
+        "soal_terjawab": 18,
+        "has_essay": false,
+        "waktu_selesai": "2025-12-27T11:30:00.000Z"
+      },
+      "created_at": "2025-12-27T11:30:00.000Z"
+    }
+  ],
+  "total": 2
+}
+```
+
+### 4. Get Activity Logs by Type
+**GET** `/activity-logs/type/:activityType`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Query Parameters:**
+- `limit` (optional): Limit number of results (default: 100)
+
+**Example:** `/activity-logs/type/AUTO_FINISH_UJIAN`
+
+**Response:**
+```json
+{
+  "activity_type": "AUTO_FINISH_UJIAN",
+  "logs": [
+    {
+      "log_id": 15,
+      "user_id": 8,
+      "peserta_ujian_id": 25,
+      "activity_type": "AUTO_FINISH_UJIAN",
+      "description": "Ujian diselesaikan otomatis karena waktu habis",
+      "ip_address": null,
+      "metadata": {
+        "ujian_id": 5,
+        "nilai_akhir": 75,
+        "total_soal": 25,
+        "soal_terjawab": 20,
+        "has_essay": true
+      },
+      "created_at": "2025-12-27T12:00:00.000Z"
+    }
+  ],
+  "total": 1
+}
+```
+
+**Activity Types:**
+- `LOGIN` - User berhasil login
+- `START_UJIAN` - Siswa memulai ujian
+- `FINISH_UJIAN` - Siswa menyelesaikan ujian secara manual
+- `AUTO_FINISH_UJIAN` - Ujian diselesaikan otomatis (waktu habis)
+- `BLOCKED` - Siswa terblokir (keluar dari aplikasi saat ujian)
+- `UNBLOCKED` - Siswa di-unblock oleh admin/guru
+
+**Notes:**
+- All activity log endpoints require authentication with admin or guru role
+- Activity logs are created automatically by the system
+- `metadata` field contains JSON with context-specific information
+- `ip_address` and `user_agent` are automatically captured from request headers
+- Logs are useful for audit trail, monitoring, and troubleshooting
+
+---
+
+**Happy Testing! 🎉**

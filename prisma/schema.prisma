@@ -70,3 +70,21 @@ model Siswa {
   @@map("siswas")
 }
 
+// Tabel Activity Log untuk audit trail
+model ActivityLog {
+  log_id         Int      @id @default(autoincrement())
+  user_id        Int?
+  peserta_ujian_id Int?
+  activity_type  String   // LOGIN, LOGOUT, START_UJIAN, SUBMIT_JAWABAN, FINISH_UJIAN, BLOCKED, UNBLOCKED, etc.
+  description    String   @db.Text
+  ip_address     String?
+  user_agent     String?  @db.Text
+  metadata       String?  @db.Text // JSON string for additional data
+  created_at     DateTime @default(now())
+
+  @@map("activity_logs")
+  @@index([user_id])
+  @@index([peserta_ujian_id])
+  @@index([activity_type])
+  @@index([created_at])
+}

@@ -14,11 +14,11 @@ const {
 router.use(verifyToken, checkRole('admin'));
 
 // Activities routes
-router.get('/', getAllActivities);                               // Get all activities/exams with filters
-router.get('/:ujianId/participants', getExamParticipants);       // Get participants of specific exam
-router.get('/participant/:participantId', getParticipantDetail); // Get participant detail
-router.post('/participant/block', blockParticipant);             // Block participant from exam
-router.post('/participant/unlock', generateUnlockCode);          // Generate unlock code for participant
-router.post('/participant/unblock', unblockParticipant);         // Unblock participant
+router.get('/', getAllActivities);                                  // Get all activities/exams with filters
+router.get('/:ujianId/participants', getExamParticipants);          // Get participants of specific exam
+router.get('/participant/:pesertaUjianId', getParticipantDetail);   // Get participant detail
+router.post('/:pesertaUjianId/block', blockParticipant);            // Block participant from exam
+router.post('/:pesertaUjianId/generate-unlock', generateUnlockCode);// Generate unlock code for participant
+router.post('/:pesertaUjianId/unblock', unblockParticipant);        // Unblock participant
 
 module.exports = router;

@@ -1,6 +1,7 @@
 const prisma = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const activityLogService = require('../services/activityLogService');
 
 const register = async (req, res) => {
   const { username, password, role, nama, kelas, tingkat, jurusan } = req.body;
@@ -84,6 +85,19 @@ const login = async (req, res) => {
       process.env.JWT_SECRET, 
       { expiresIn: '1d' }
     );
+
+    // Log activity
+    await activityLogService.createLog({
+      user_id: user.id,
+      activity_type: 'LOGIN',
+      description: `User ${username} (${user.role}) berhasil login`,
+      ip_address: activityLogService.getIpAddress(req),
+      user_agent: activityLogService.getUserAgent(req),
+      metadata: {
+        username,
+        role: user.role
+      }
+    });
 
     res.json({
       message: 'Login berhasil',
