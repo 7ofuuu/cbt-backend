@@ -70,7 +70,7 @@ const createUjian = async (req, res) => {
         // Don't throw - ujian is already created
       }
     }
-
+  
     const response = { 
       message: 'Ujian berhasil dibuat', 
       ujian_id: ujian.ujian_id,
@@ -101,8 +101,8 @@ const getUjians = async (req, res) => {
     const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
+    // Tampilkan semua ujian untuk semua guru
     const ujians = await prisma.ujian.findMany({
-      where: { guru_id: guru.guru_id },
       include: {
         soalUjians: {
           include: { soal: true }
@@ -163,11 +163,11 @@ const updateUjian = async (req, res) => {
     const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
-    // Check ownership
-    const ujian = await prisma.ujian.findFirst({
-      where: { ujian_id: parseInt(id), guru_id: guru.guru_id }
+    // Check ujian exists (tanpa check ownership)
+    const ujian = await prisma.ujian.findUnique({
+      where: { ujian_id: parseInt(id) }
     });
-    if (!ujian) return res.status(403).json({ error: 'Ujian tidak ditemukan atau bukan milik Anda' });
+    if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
     // Update fields yang ada di request body
     const dataToUpdate = {};
@@ -200,11 +200,11 @@ const deleteUjian = async (req, res) => {
     const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
-    // Check ownership
-    const ujian = await prisma.ujian.findFirst({
-      where: { ujian_id: parseInt(id), guru_id: guru.guru_id }
+    // Check ujian exists (tanpa check ownership)
+    const ujian = await prisma.ujian.findUnique({
+      where: { ujian_id: parseInt(id) }
     });
-    if (!ujian) return res.status(403).json({ error: 'Ujian tidak ditemukan atau bukan milik Anda' });
+    if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
     await prisma.ujian.delete({ where: { ujian_id: parseInt(id) } });
 
@@ -223,11 +223,11 @@ const assignSoalToUjian = async (req, res) => {
     const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
-    // Check ownership ujian
-    const ujian = await prisma.ujian.findFirst({
-      where: { ujian_id, guru_id: guru.guru_id }
+    // Check ujian exists (tanpa check ownership)
+    const ujian = await prisma.ujian.findUnique({
+      where: { ujian_id }
     });
-    if (!ujian) return res.status(403).json({ error: 'Ujian tidak ditemukan atau bukan milik Anda' });
+    if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
     const soalUjian = await prisma.soalUjian.create({
       data: {
@@ -253,11 +253,11 @@ const assignBankToUjian = async (req, res) => {
     const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
-    // Check ownership ujian
-    const ujian = await prisma.ujian.findFirst({
-      where: { ujian_id, guru_id: guru.guru_id }
+    // Check ujian exists (tanpa check ownership)
+    const ujian = await prisma.ujian.findUnique({
+      where: { ujian_id }
     });
-    if (!ujian) return res.status(403).json({ error: 'Ujian tidak ditemukan atau bukan milik Anda' });
+    if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
     // Get all soal from the bank
     const filters = {
@@ -320,11 +320,11 @@ const removeMultipleSoal = async (req, res) => {
     const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
-    // Check ownership ujian
-    const ujian = await prisma.ujian.findFirst({
-      where: { ujian_id, guru_id: guru.guru_id }
+    // Check ujian exists (tanpa check ownership)
+    const ujian = await prisma.ujian.findUnique({
+      where: { ujian_id }
     });
-    if (!ujian) return res.status(403).json({ error: 'Ujian tidak ditemukan atau bukan milik Anda' });
+    if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
     // Validate all soal_ujian_ids belong to this ujian
     const soalUjians = await prisma.soalUjian.findMany({
@@ -363,11 +363,11 @@ const removeBankFromUjian = async (req, res) => {
     const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
-    // Check ownership ujian
-    const ujian = await prisma.ujian.findFirst({
-      where: { ujian_id, guru_id: guru.guru_id }
+    // Check ujian exists (tanpa check ownership)
+    const ujian = await prisma.ujian.findUnique({
+      where: { ujian_id }
     });
-    if (!ujian) return res.status(403).json({ error: 'Ujian tidak ditemukan atau bukan milik Anda' });
+    if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
     // Validate required fields
     if (!jurusan) {
@@ -415,11 +415,11 @@ const clearAllSoal = async (req, res) => {
     const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
-    // Check ownership ujian
-    const ujian = await prisma.ujian.findFirst({
-      where: { ujian_id: parseInt(ujianId), guru_id: guru.guru_id }
+    // Check ujian exists (tanpa check ownership)
+    const ujian = await prisma.ujian.findUnique({
+      where: { ujian_id: parseInt(ujianId) }
     });
-    if (!ujian) return res.status(403).json({ error: 'Ujian tidak ditemukan atau bukan milik Anda' });
+    if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
     // Count soal before delete
     const count = await prisma.soalUjian.count({
@@ -449,11 +449,11 @@ const getSoalByBank = async (req, res) => {
     const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
-    // Check ownership ujian
-    const ujian = await prisma.ujian.findFirst({
-      where: { ujian_id: parseInt(ujianId), guru_id: guru.guru_id }
+    // Check ujian exists (tanpa check ownership)
+    const ujian = await prisma.ujian.findUnique({
+      where: { ujian_id: parseInt(ujianId) }
     });
-    if (!ujian) return res.status(403).json({ error: 'Ujian tidak ditemukan atau bukan milik Anda' });
+    if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
     // Get all soal_ujian with soal details
     const soalUjians = await prisma.soalUjian.findMany({
@@ -566,14 +566,14 @@ const removeSoalFromUjian = async (req, res) => {
     const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
-    // Check ownership
+    // Check soal ujian exists (tanpa check ownership)
     const soalUjian = await prisma.soalUjian.findUnique({
       where: { soal_ujian_id: parseInt(id) },
       include: { ujian: true }
     });
 
-    if (!soalUjian || soalUjian.ujian.guru_id !== guru.guru_id) {
-      return res.status(403).json({ error: 'Soal tidak ditemukan atau bukan milik Anda' });
+    if (!soalUjian) {
+      return res.status(404).json({ error: 'Soal ujian tidak ditemukan' });
     }
 
     await prisma.soalUjian.delete({ where: { soal_ujian_id: parseInt(id) } });
@@ -593,11 +593,11 @@ const assignSiswaToUjian = async (req, res) => {
     const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
-    // Check ownership ujian
-    const ujian = await prisma.ujian.findFirst({
-      where: { ujian_id, guru_id: guru.guru_id }
+    // Check ujian exists (tanpa check ownership)
+    const ujian = await prisma.ujian.findUnique({
+      where: { ujian_id }
     });
-    if (!ujian) return res.status(403).json({ error: 'Ujian tidak ditemukan atau bukan milik Anda' });
+    if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
     // Cari siswa berdasarkan tingkat & jurusan
     const filters = { tingkat };
