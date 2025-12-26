@@ -805,14 +805,300 @@ Authorization: Bearer <token>
 
 ---
 
-## 🔑 Role-Based Access
+## �‍🎓 SISWA ENDPOINTS (Siswa Only)
+
+### 1. Get My Ujians (List ujian yang di-assign ke siswa)
+**GET** `/siswa/ujians`
+
+**Headers:** `Authorization: Bearer <token>` (role: siswa)
+
+**Response:**
+```json
+{
+  "ujians": [
+    {
+      "peserta_ujian_id": 5,
+      "status_ujian": "BELUM_MULAI",
+      "is_blocked": false,
+      "unlock_code": null,
+      "waktu_mulai": null,
+      "waktu_selesai": null,
+      "ujian": {
+        "ujian_id": 2,
+        "nama_ujian": "Ujian Matematika Semester 1",
+        "mata_pelajaran": "Matematika",
+        "tingkat": "10",
+        "jurusan": "IPA",
+        "tanggal_mulai": "2025-12-26T08:00:00.000Z",
+        "tanggal_selesai": "2025-12-26T10:00:00.000Z",
+        "durasi_menit": 90,
+        "is_acak_soal": false
+      },
+      "hasil": null
+    },
+    {
+      "peserta_ujian_id": 8,
+      "status_ujian": "DINILAI",
+      "is_blocked": false,
+      "unlock_code": null,
+      "waktu_mulai": "2025-12-20T08:15:00.000Z",
+      "waktu_selesai": "2025-12-20T09:30:00.000Z",
+      "ujian": {
+        "ujian_id": 1,
+        "nama_ujian": "Ujian Fisika",
+        "mata_pelajaran": "Fisika",
+        "tingkat": "10",
+        "jurusan": "IPA",
+        "tanggal_mulai": "2025-12-20T08:00:00.000Z",
+        "tanggal_selesai": "2025-12-20T10:00:00.000Z",
+        "durasi_menit": 90,
+        "is_acak_soal": true
+      },
+      "hasil": {
+        "nilai_akhir": 85.5,
+        "tanggal_submit": "2025-12-20T09:30:00.000Z"
+      }
+    }
+  ]
+}
+```
+
+**Status Ujian:**
+- `BELUM_MULAI` - Ujian belum dikerjakan
+- `SEDANG_DIKERJAKAN` - Sedang mengerjakan
+- `SELESAI` - Sudah submit, menunggu grading essay
+- `DINILAI` - Nilai sudah final
+
+---
+
+### 2. Start Ujian (Mulai mengerjakan ujian)
+**POST** `/siswa/ujians/start`
+
+**Headers:** `Authorization: Bearer <token>` (role: siswa)
+
+**Body:**
+```json
+{
+  "peserta_ujian_id": 5,
+  "unlock_code": "ABC123"  // Optional, hanya jika ujian terblokir
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Ujian berhasil dimulai",
+  "peserta_ujian": {
+    "peserta_ujian_id": 5,
+    "status_ujian": "SEDANG_DIKERJAKAN",
+    "waktu_mulai": "2025-12-26T10:15:00.000Z",
+    "durasi_menit": 90,
+    "ujian": {
+      "ujian_id": 2,
+      "nama_ujian": "Ujian Matematika Semester 1",
+      "mata_pelajaran": "Matematika",
+      "is_acak_soal": false
+    },
+    "soal_list": [
+      {
+        "soal_ujian_id": 15,
+        "urutan": 1,
+        "bobot_nilai": 10,
+        "soal": {
+          "soal_id": 7,
+          "tipe_soal": "PILIHAN_GANDA",
+          "teks_soal": "Berapa hasil dari 2 + 2?",
+          "soal_gambar": null,
+          "opsi_jawaban": [
+            {
+              "opsi_id": 1,
+              "label_opsi": "A",
+              "teks_opsi": "3"
+            },
+            {
+              "opsi_id": 2,
+              "label_opsi": "B",
+              "teks_opsi": "4"
+            },
+            {
+              "opsi_id": 3,
+              "label_opsi": "C",
+              "teks_opsi": "5"
+            }
+          ]
+        },
+        "jawaban_saya": null
+      },
+      {
+        "soal_ujian_id": 16,
+        "urutan": 2,
+        "bobot_nilai": 15,
+        "soal": {
+          "soal_id": 8,
+          "tipe_soal": "ESSAY",
+          "teks_soal": "Jelaskan konsep limit dalam matematika",
+          "soal_gambar": null,
+          "opsi_jawaban": []
+        },
+        "jawaban_saya": null
+      }
+    ],
+    "total_soal": 10
+  }
+}
+```
+
+**Error Responses:**
+- `403` - Ujian terblokir, perlu unlock_code
+- `400` - Ujian sudah selesai / waktu belum dimulai / waktu sudah lewat
+
+**Notes:**
+- Jawaban benar (`is_benar`) TIDAK ditampilkan untuk opsi jawaban
+- Jika ujian pernah dimulai, `jawaban_saya` akan berisi jawaban yang sudah tersimpan (resume capability)
+- Frontend harus menyimpan `waktu_mulai` untuk countdown timer
+
+---
+
+### 3. Submit Jawaban (Auto-save per soal)
+**POST** `/siswa/ujians/jawaban`
+
+**Headers:** `Authorization: Bearer <token>` (role: siswa)
+
+**Body (Pilihan Ganda):**
+```json
+{
+  "peserta_ujian_id": 5,
+  "soal_id": 7,
+  "opsi_jawaban_id": 2
+}
+```
+
+**Body (Essay):**
+```json
+{
+  "peserta_ujian_id": 5,
+  "soal_id": 8,
+  "teks_jawaban": "Limit adalah konsep matematika yang menjelaskan..."
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Jawaban berhasil disimpan",
+  "jawaban": {
+    "jawaban_id": 25,
+    "soal_id": 7,
+    "opsi_jawaban_id": 2,
+    "teks_jawaban": null
+  }
+}
+```
+
+**Notes:**
+- Endpoint ini dapat dipanggil **berkali-kali** untuk soal yang sama (update jawaban)
+- Auto-grading dilakukan untuk PILIHAN_GANDA (tapi `is_correct` TIDAK dikirim ke frontend)
+- Jawaban tersimpan real-time (auto-save)
+- Frontend sebaiknya call endpoint ini setiap kali siswa mengubah jawaban (debounced)
+
+---
+
+### 4. Finish Ujian (Finalisasi & submit)
+**POST** `/siswa/ujians/finish`
+
+**Headers:** `Authorization: Bearer <token>` (role: siswa)
+
+**Body:**
+```json
+{
+  "peserta_ujian_id": 5
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Ujian berhasil diselesaikan",
+  "hasil": {
+    "hasil_ujian_id": 12,
+    "nilai_akhir": 82.5,
+    "status": "Selesai dinilai",
+    "total_soal": 10,
+    "soal_terjawab": 10
+  }
+}
+```
+
+**Response (jika ada essay):**
+```json
+{
+  "message": "Ujian berhasil diselesaikan",
+  "hasil": {
+    "hasil_ujian_id": 12,
+    "nilai_akhir": 70.0,
+    "status": "Menunggu penilaian essay oleh guru",
+    "total_soal": 10,
+    "soal_terjawab": 9
+  }
+}
+```
+
+**Notes:**
+- Status `PesertaUjian` berubah menjadi `SELESAI`
+- Auto-calculate nilai untuk PILIHAN_GANDA
+- Jika ada ESSAY, status = "Menunggu penilaian", nilai bersifat temporary
+- Jika tidak ada ESSAY, status langsung `DINILAI` dan nilai final
+
+---
+
+## 📊 HASIL UJIAN ENDPOINTS
+
+### 1. Get My Hasil (Siswa - lihat hasil ujian sendiri)
+**GET** `/hasil-ujian/my-hasil`
+
+**Headers:** `Authorization: Bearer <token>` (role: siswa)
+
+**Response:**
+```json
+{
+  "hasil": [
+    {
+      "hasil_ujian_id": 12,
+      "peserta_ujian_id": 5,
+      "nilai_akhir": 85.5,
+      "tanggal_submit": "2025-12-26T11:30:00.000Z",
+      "pesertaUjian": {
+        "peserta_ujian_id": 5,
+        "siswa_id": 3,
+        "ujian_id": 2,
+        "status_ujian": "DINILAI",
+        "ujian": {
+          "ujian_id": 2,
+          "nama_ujian": "Ujian Matematika Semester 1",
+          "mata_pelajaran": "Matematika",
+          "tingkat": "10",
+          "jurusan": "IPA",
+          "tanggal_mulai": "2025-12-26T08:00:00.000Z",
+          "tanggal_selesai": "2025-12-26T10:00:00.000Z"
+        }
+      }
+    }
+  ]
+}
+```
+
+---
+
+## �🔑 Role-Based Access
 
 | Endpoint | Admin | Guru | Siswa |
 |----------|-------|------|-------|
 | `/auth/*` | ✅ | ✅ | ✅ |
 | `/soal/*` | ❌ | ✅ | ❌ |
 | `/ujian/*` | ❌ | ✅ | ❌ |
-| `/siswa/*` | ❌ | ❌ | ✅ |
+| `/siswa/ujians/*` | ❌ | ❌ | ✅ |
+| `/hasil-ujian/my-hasil` | ❌ | ❌ | ✅ |
+| `/hasil-ujian/*` (other) | ❌ | ✅ | ❌ |
 | `/admin/activities/*` | ✅ | ❌ | ❌ |
 | `/users` (User Mgmt) | ✅ | ❌ | ❌ |
 | `/users/nilai` | ❌ | ✅ | ❌ |
@@ -875,20 +1161,17 @@ node index.js
 4. POST `/ujian/assign-soal` → Assign 10 soal ke ujian
 5. POST `/ujian/assign-siswa` → Assign siswa kelas 10 IPA
 
-### Siswa mengerjakan ujian:
-1. Login → Get token
-2. GET `/siswa/ujians` → Lihat ujian tersedia
-3. POST `/siswa/ujians/start` → Mulai ujian
-4. POST `/siswa/ujians/jawaban` → Submit jawaban (repeat 10x)
-5. POST `/siswa/ujians/finish` → Selesai ujian
-
-### Guru menilai:
-1. GET `/ujian/:id` → Lihat peserta & jawaban
-2. POST `/users/nilai` → Nilai essay manual (jika ada)
-3. POST `/users/finalisasi` → Finalisasi nilai total
-
-### Siswa lihat hasil:
-1. GET `/siswa/ujians/hasil/:peserta_ujian_id` → Lihat nilai
+### Siswa mengerjakan ujian (Incremental Auto-Save):
+1. **Login** → `POST /auth/login` → Get token
+2. **Lihat ujian** → `GET /siswa/ujians` → Lihat ujian yang di-assign
+3. **Mulai ujian** → `POST /siswa/ujians/start` → Mulai & get soal list
+4. **Kerjakan soal** (auto-save per soal):
+   - Soal 1 → `POST /siswa/ujians/jawaban` (soal_id: 1, opsi_jawaban_id: 2)
+   - Soal 2 → `POST /siswa/ujians/jawaban` (soal_id: 2, teks_jawaban: "...")
+   - Soal 3 → `POST /siswa/ujians/jawaban` (soal_id: 3, opsi_jawaban_id: 1)
+   - ... (repeat untuk semua soal)
+5. **Finalisasi** → `POST /siswa/ujians/finish` → Submit & calculate nilai
+6. **Lihat hasil** → `GET /hasil-ujian/my-hasil` → Lihat nilai final
 
 ---
 
