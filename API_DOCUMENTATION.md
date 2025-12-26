@@ -1087,6 +1087,283 @@ Authorization: Bearer <token>
 }
 ```
 
+### 2. Get Hasil by Ujian (Guru - lihat semua hasil ujian)
+**GET** `/hasil-ujian/ujian/:ujian_id`
+
+**Headers:** `Authorization: Bearer <token>` (role: guru)
+
+**Example:** `/hasil-ujian/ujian/1`
+
+**Response:**
+```json
+{
+  "ujian": {
+    "ujian_id": 1,
+    "nama_ujian": "UTS Matematika Semester 1",
+    "mata_pelajaran": "Matematika"
+  },
+  "total_peserta": 30,
+  "hasil": [
+    {
+      "hasil_ujian_id": 12,
+      "peserta_ujian_id": 5,
+      "nilai_akhir": 92.5,
+      "tanggal_submit": "2025-12-26T10:30:00.000Z",
+      "pesertaUjian": {
+        "peserta_ujian_id": 5,
+        "siswa_id": 3,
+        "status_ujian": "DINILAI",
+        "siswa": {
+          "siswa_id": 3,
+          "nama_lengkap": "Ahmad Fauzi",
+          "kelas": "X-1",
+          "tingkat": "X",
+          "jurusan": "IPA"
+        }
+      }
+    },
+    {
+      "hasil_ujian_id": 13,
+      "peserta_ujian_id": 6,
+      "nilai_akhir": 87.0,
+      "tanggal_submit": "2025-12-26T10:35:00.000Z",
+      "pesertaUjian": {
+        "siswa": {
+          "nama_lengkap": "Siti Nurhaliza",
+          "kelas": "X-1"
+        }
+      }
+    }
+  ]
+}
+```
+
+**Notes:**
+- Returns all hasil ujian sorted by nilai_akhir (highest first)
+- Only shows results for ujian owned by the logged-in guru
+- Includes student information for each result
+
+### 3. Get Hasil by Peserta (Guru - detail hasil satu siswa)
+**GET** `/hasil-ujian/peserta/:peserta_ujian_id`
+
+**Headers:** `Authorization: Bearer <token>` (role: guru)
+
+**Example:** `/hasil-ujian/peserta/5`
+
+**Response:**
+```json
+{
+  "hasil": {
+    "hasil_ujian_id": 12,
+    "peserta_ujian_id": 5,
+    "nilai_akhir": 85.5,
+    "tanggal_submit": "2025-12-26T10:30:00.000Z",
+    "pesertaUjian": {
+      "peserta_ujian_id": 5,
+      "siswa_id": 3,
+      "ujian_id": 1,
+      "status_ujian": "DINILAI",
+      "siswa": {
+        "siswa_id": 3,
+        "nama_lengkap": "Ahmad Fauzi",
+        "kelas": "X-1",
+        "tingkat": "X",
+        "jurusan": "IPA"
+      },
+      "ujian": {
+        "ujian_id": 1,
+        "nama_ujian": "UTS Matematika",
+        "mata_pelajaran": "Matematika",
+        "tanggal_mulai": "2025-12-26T08:00:00.000Z",
+        "tanggal_selesai": "2025-12-26T10:00:00.000Z"
+      },
+      "jawabans": [
+        {
+          "jawaban_id": 15,
+          "soal_id": 1,
+          "is_correct": true,
+          "nilai_manual": null,
+          "soal": {
+            "soal_id": 1,
+            "teks_soal": "Berapa hasil 2 + 2?",
+            "tipe_soal": "PILIHAN_GANDA_SINGLE"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+**Notes:**
+- Returns basic hasil info with student answers
+- Use this for quick overview of student's result
+
+### 4. Get Detailed Result (Guru - review lengkap semua jawaban)
+**GET** `/hasil-ujian/detail/:peserta_ujian_id`
+
+**Headers:** `Authorization: Bearer <token>` (role: guru)
+
+**Example:** `/hasil-ujian/detail/5`
+
+**Response:**
+```json
+{
+  "hasil_ujian": {
+    "hasil_ujian_id": 12,
+    "nilai_akhir": 82.5,
+    "tanggal_submit": "2025-12-26T10:30:00.000Z"
+  },
+  "siswa": {
+    "siswa_id": 3,
+    "nama_lengkap": "Ahmad Fauzi",
+    "kelas": "X-1",
+    "tingkat": "X",
+    "jurusan": "IPA"
+  },
+  "ujian": {
+    "ujian_id": 1,
+    "nama_ujian": "UTS Matematika Semester 1",
+    "mata_pelajaran": "Matematika"
+  },
+  "review": [
+    {
+      "urutan": 1,
+      "soal": {
+        "soal_id": 7,
+        "tipe_soal": "PILIHAN_GANDA_SINGLE",
+        "teks_soal": "Berapa hasil dari 2 + 2?",
+        "opsiJawabans": [
+          {
+            "opsi_id": 1,
+            "label": "A",
+            "teks_opsi": "3",
+            "is_benar": false
+          },
+          {
+            "opsi_id": 2,
+            "label": "B",
+            "teks_opsi": "4",
+            "is_benar": true
+          }
+        ]
+      },
+      "bobot_nilai": 10,
+      "jawaban": {
+        "jawaban_id": 15,
+        "opsi_jawaban_id": 2,
+        "teks_jawaban": null,
+        "is_correct": true,
+        "nilai_manual": null
+      },
+      "is_correct": true,
+      "nilai_didapat": 10
+    },
+    {
+      "urutan": 2,
+      "soal": {
+        "soal_id": 8,
+        "tipe_soal": "ESSAY",
+        "teks_soal": "Jelaskan konsep limit dalam matematika"
+      },
+      "bobot_nilai": 20,
+      "jawaban": {
+        "jawaban_id": 16,
+        "teks_jawaban": "Limit adalah nilai yang didekati...",
+        "is_correct": null,
+        "nilai_manual": 75.5
+      },
+      "is_correct": null,
+      "nilai_didapat": 75.5
+    }
+  ]
+}
+```
+
+**Notes:**
+- Most detailed view for grading and review
+- Shows all soal with their jawaban in order
+- Includes bobot_nilai and nilai_didapat for each soal
+- Used for grading essay questions and reviewing student work
+
+### 5. Update Nilai Manual (Guru - nilai soal essay)
+**PUT** `/hasil-ujian/nilai-manual`
+
+**Headers:** `Authorization: Bearer <token>` (role: guru)
+
+**Body:**
+```json
+{
+  "jawaban_id": 16,
+  "nilai_manual": 85.0
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Nilai manual berhasil diupdate",
+  "jawaban": {
+    "jawaban_id": 16,
+    "soal_id": 8,
+    "peserta_ujian_id": 5,
+    "teks_jawaban": "Limit adalah nilai yang didekati...",
+    "nilai_manual": 85.0,
+    "is_correct": null
+  }
+}
+```
+
+**Notes:**
+- Used for grading ESSAY questions manually
+- `nilai_manual` range: 0-100 (percentage)
+- Automatically recalculates the final score (nilai_akhir) after update
+- Final score formula: `(totalNilai / totalBobot) × 100`
+- For PG: `nilai_didapat = bobot_nilai` (if correct)
+- For Essay: `nilai_didapat = (nilai_manual / 100) × bobot_nilai`
+
+**Example Calculation:**
+```
+Soal 1 (PG, bobot 10): Benar → nilai = 10
+Soal 2 (Essay, bobot 20): Manual 85% → nilai = 17
+Soal 3 (PG, bobot 10): Salah → nilai = 0
+
+Total Bobot = 40
+Total Nilai = 27
+Nilai Akhir = (27/40) × 100 = 67.5
+```
+
+### 6. Calculate Hasil Ujian (Guru - recalculate nilai)
+**POST** `/hasil-ujian/calculate`
+
+**Headers:** `Authorization: Bearer <token>` (role: guru)
+
+**Body:**
+```json
+{
+  "peserta_ujian_id": 5
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Hasil ujian berhasil dihitung",
+  "hasil": {
+    "hasil_ujian_id": 12,
+    "nilai_akhir": 82.5,
+    "total_nilai": 33.0,
+    "total_bobot": 40
+  }
+}
+```
+
+**Notes:**
+- Manually trigger recalculation of final score
+- Automatically called after updating nilai_manual
+- Useful if you need to recalculate after fixing data
+- Updates status_ujian to 'DINILAI' after calculation
+
 ---
 
 ## �🔑 Role-Based Access
@@ -1191,6 +1468,196 @@ node index.js
 - `403` - Forbidden (wrong role)
 - `404` - Not Found
 - `500` - Server Error
+
+---
+
+**Happy Testing! 🎉**
+---
+
+## 📊 ACTIVITY LOG ENDPOINTS (Admin & Guru Only)
+
+### 1. Get All Activity Logs
+**GET** `/activity-logs`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Query Parameters:**
+- `activity_type` (optional): Filter by activity type (LOGIN, START_UJIAN, FINISH_UJIAN, AUTO_FINISH_UJIAN, BLOCKED, UNBLOCKED)
+- `user_id` (optional): Filter by user ID
+- `peserta_ujian_id` (optional): Filter by peserta ujian ID
+- `search` (optional): Search in description field
+- `limit` (optional): Limit number of results (default: 100)
+
+**Example:** `/activity-logs?activity_type=START_UJIAN&limit=50`
+
+**Response:**
+```json
+{
+  "logs": [
+    {
+      "log_id": 1,
+      "user_id": 5,
+      "peserta_ujian_id": 10,
+      "activity_type": "START_UJIAN",
+      "description": "Siswa memulai ujian Matematika UTS",
+      "ip_address": "192.168.1.100",
+      "user_agent": "Mozilla/5.0...",
+      "metadata": {
+        "ujian_id": 3,
+        "total_soal": 20,
+        "waktu_mulai": "2025-12-27T10:00:00.000Z"
+      },
+      "created_at": "2025-12-27T10:00:00.000Z"
+    }
+  ],
+  "total": 1
+}
+```
+
+### 2. Get Activity Logs by User
+**GET** `/activity-logs/user/:userId`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Query Parameters:**
+- `limit` (optional): Limit number of results (default: 50)
+
+**Example:** `/activity-logs/user/5?limit=20`
+
+**Response:**
+```json
+{
+  "user_id": 5,
+  "logs": [
+    {
+      "log_id": 1,
+      "user_id": 5,
+      "peserta_ujian_id": 10,
+      "activity_type": "LOGIN",
+      "description": "User berhasil login",
+      "ip_address": "192.168.1.100",
+      "user_agent": "Mozilla/5.0...",
+      "metadata": {
+        "username": "siswa1",
+        "role": "siswa"
+      },
+      "created_at": "2025-12-27T09:55:00.000Z"
+    },
+    {
+      "log_id": 2,
+      "user_id": 5,
+      "peserta_ujian_id": 10,
+      "activity_type": "START_UJIAN",
+      "description": "Siswa memulai ujian Matematika UTS",
+      "ip_address": "192.168.1.100",
+      "created_at": "2025-12-27T10:00:00.000Z"
+    }
+  ],
+  "total": 2
+}
+```
+
+### 3. Get Activity Logs by Peserta Ujian
+**GET** `/activity-logs/peserta-ujian/:pesertaUjianId`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Query Parameters:**
+- `limit` (optional): Limit number of results (default: 50)
+
+**Example:** `/activity-logs/peserta-ujian/10`
+
+**Response:**
+```json
+{
+  "peserta_ujian_id": 10,
+  "logs": [
+    {
+      "log_id": 2,
+      "user_id": 5,
+      "peserta_ujian_id": 10,
+      "activity_type": "START_UJIAN",
+      "description": "Siswa memulai ujian Matematika UTS",
+      "ip_address": "192.168.1.100",
+      "metadata": {
+        "ujian_id": 3,
+        "total_soal": 20,
+        "waktu_mulai": "2025-12-27T10:00:00.000Z"
+      },
+      "created_at": "2025-12-27T10:00:00.000Z"
+    },
+    {
+      "log_id": 3,
+      "user_id": 5,
+      "peserta_ujian_id": 10,
+      "activity_type": "FINISH_UJIAN",
+      "description": "Siswa menyelesaikan ujian Matematika UTS",
+      "ip_address": "192.168.1.100",
+      "metadata": {
+        "ujian_id": 3,
+        "nilai_akhir": 85,
+        "total_soal": 20,
+        "soal_terjawab": 18,
+        "has_essay": false,
+        "waktu_selesai": "2025-12-27T11:30:00.000Z"
+      },
+      "created_at": "2025-12-27T11:30:00.000Z"
+    }
+  ],
+  "total": 2
+}
+```
+
+### 4. Get Activity Logs by Type
+**GET** `/activity-logs/type/:activityType`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Query Parameters:**
+- `limit` (optional): Limit number of results (default: 100)
+
+**Example:** `/activity-logs/type/AUTO_FINISH_UJIAN`
+
+**Response:**
+```json
+{
+  "activity_type": "AUTO_FINISH_UJIAN",
+  "logs": [
+    {
+      "log_id": 15,
+      "user_id": 8,
+      "peserta_ujian_id": 25,
+      "activity_type": "AUTO_FINISH_UJIAN",
+      "description": "Ujian diselesaikan otomatis karena waktu habis",
+      "ip_address": null,
+      "metadata": {
+        "ujian_id": 5,
+        "nilai_akhir": 75,
+        "total_soal": 25,
+        "soal_terjawab": 20,
+        "has_essay": true
+      },
+      "created_at": "2025-12-27T12:00:00.000Z"
+    }
+  ],
+  "total": 1
+}
+```
+
+**Activity Types:**
+- `LOGIN` - User berhasil login
+- `START_UJIAN` - Siswa memulai ujian
+- `FINISH_UJIAN` - Siswa menyelesaikan ujian secara manual
+- `AUTO_FINISH_UJIAN` - Ujian diselesaikan otomatis (waktu habis)
+- `BLOCKED` - Siswa terblokir (keluar dari aplikasi saat ujian)
+- `UNBLOCKED` - Siswa di-unblock oleh admin/guru
+
+**Notes:**
+- All activity log endpoints require authentication with admin or guru role
+- Activity logs are created automatically by the system
+- `metadata` field contains JSON with context-specific information
+- `ip_address` and `user_agent` are automatically captured from request headers
+- Logs are useful for audit trail, monitoring, and troubleshooting
 
 ---
 
