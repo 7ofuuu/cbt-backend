@@ -15,7 +15,14 @@ const getMyUjians = async (req, res) => {
     }
 
     const pesertaUjians = await prisma.peserta_ujians.findMany({
-      where: { siswa_id: siswa.siswa_id },
+      where: {
+        siswa_id: siswa.siswa_id,
+        ujians: {
+          status_ujian: {
+            in: ['TERJADWAL', 'BERLANGSUNG'],
+          },
+        },
+      },
       include: {
         ujians: {
           select: {
@@ -27,6 +34,7 @@ const getMyUjians = async (req, res) => {
             tanggal_mulai: true,
             tanggal_selesai: true,
             durasi_menit: true,
+            status_ujian: true,
             is_acak_soal: true,
           },
         },

@@ -167,7 +167,7 @@ model soals {
 }
 
 model ujians {
-  ujian_id        Int              @id @default(autoincrement())
+  ujian_id        Int                     @id @default(autoincrement())
   nama_ujian      String
   mata_pelajaran  String
   tingkat         String
@@ -175,13 +175,14 @@ model ujians {
   tanggal_mulai   DateTime
   tanggal_selesai DateTime
   durasi_menit    Int
-  is_acak_soal    Boolean          @default(false)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  is_acak_soal    Boolean                 @default(false)
+  status_ujian    ujians_status_ujian     @default(TERJADWAL)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
   guru_id         Int
   peserta_ujians  peserta_ujians[]
   soal_ujians     soal_ujians[]
-  gurus           Guru             @relation(fields: [guru_id], references: [guru_id], onDelete: Cascade)
+  gurus           Guru                    @relation(fields: [guru_id], references: [guru_id], onDelete: Cascade)
 
   @@index([guru_id], map: "ujians_guru_id_fkey")
 }
@@ -197,6 +198,12 @@ enum peserta_ujians_status_ujian {
   SEDANG_DIKERJAKAN
   SELESAI
   DINILAI
+}
+
+enum ujians_status_ujian {
+  TERJADWAL
+  BERLANGSUNG
+  BERAKHIR
 }
 
 enum soals_tipe_soal {
