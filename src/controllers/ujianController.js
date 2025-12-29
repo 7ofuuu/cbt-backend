@@ -2,16 +2,16 @@ const prisma = require('../config/db');
 
 // Create Ujian
 const createUjian = async (req, res) => {
-  const { 
-    nama_ujian, 
-    mata_pelajaran, 
-    tingkat, 
-    jurusan, 
-    tanggal_mulai, 
-    tanggal_selesai, 
-    durasi_menit, 
+  const {
+    nama_ujian,
+    mata_pelajaran,
+    tingkat,
+    jurusan,
+    tanggal_mulai,
+    tanggal_selesai,
+    durasi_menit,
     is_acak_soal,
-    auto_assign_siswa = true // Default: otomatis assign siswa
+    auto_assign_siswa = true, // Default: otomatis assign siswa
   } = req.body;
   const guru_id = req.user.id;
 
@@ -19,7 +19,7 @@ const createUjian = async (req, res) => {
     const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
-    const ujian = await prisma.ujian.create({
+    const ujian = await prisma.ujians.create({
       data: {
         nama_ujian,
         mata_pelajaran,
@@ -29,8 +29,8 @@ const createUjian = async (req, res) => {
         tanggal_selesai: new Date(tanggal_selesai),
         durasi_menit,
         is_acak_soal: is_acak_soal || false,
-        guru_id: guru.guru_id
-      }
+        guru_id: guru.guru_id,
+      },
     });
 
     let siswaAssigned = 0;
@@ -51,12 +51,12 @@ const createUjian = async (req, res) => {
             ujian_id: ujian.ujian_id,
             siswa_id: siswa.siswa_id,
             status_ujian: 'BELUM_MULAI',
-            is_blocked: false
+            is_blocked: false,
           }));
 
-          const result = await prisma.pesertaUjian.createMany({
+          const result = await prisma.peserta_ujians.createMany({
             data: pesertaData,
-            skipDuplicates: true
+            skipDuplicates: true,
           });
 
           siswaAssigned = result.count;
@@ -70,12 +70,12 @@ const createUjian = async (req, res) => {
         // Don't throw - ujian is already created
       }
     }
-  
-    const response = { 
-      message: 'Ujian berhasil dibuat', 
+
+    const response = {
+      message: 'Ujian berhasil dibuat',
       ujian_id: ujian.ujian_id,
       auto_assign_enabled: auto_assign_siswa,
-      jumlah_siswa_assigned: siswaAssigned
+      jumlah_siswa_assigned: siswaAssigned,
     };
 
     // Include warning if auto-assign was attempted but failed
@@ -102,16 +102,16 @@ const getUjians = async (req, res) => {
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
     // Tampilkan semua ujian untuk semua guru
-    const ujians = await prisma.ujian.findMany({
+    const ujians = await prisma.ujians.findMany({
       include: {
-        soalUjians: {
-          include: { soal: true }
+        soal_ujians: {
+          include: { soals: true },
         },
-        pesertaUjians: {
-          include: { siswa: true }
-        }
+        peserta_ujians: {
+          include: { siswas: true },
+        },
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'asc' },
     });
 
     res.json({ ujians });
@@ -125,24 +125,24 @@ const getUjianById = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const ujian = await prisma.ujian.findUnique({
+    const ujian = await prisma.ujians.findUnique({
       where: { ujian_id: parseInt(id) },
       include: {
-        soalUjians: {
-          include: { 
-            soal: {
-              include: { opsiJawabans: true }
-            }
+        soal_ujians: {
+          include: {
+            soals: {
+              include: { opsi_jawabans: true },
+            },
           },
-          orderBy: { urutan: 'asc' }
+          orderBy: { urutan: 'asc' },
         },
-        pesertaUjians: {
-          include: { 
-            siswa: true,
-            hasilUjian: true
-          }
-        }
-      }
+        peserta_ujians: {
+          include: {
+            siswas: true,
+            hasil_ujians: true,
+          },
+        },
+      },
     });
 
     if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
@@ -164,8 +164,8 @@ const updateUjian = async (req, res) => {
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
     // Check ujian exists (tanpa check ownership)
-    const ujian = await prisma.ujian.findUnique({
-      where: { ujian_id: parseInt(id) }
+    const ujian = await prisma.ujians.findUnique({
+      where: { ujian_id: parseInt(id) },
     });
     if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
@@ -180,9 +180,9 @@ const updateUjian = async (req, res) => {
     if (updateData.durasi_menit) dataToUpdate.durasi_menit = updateData.durasi_menit;
     if (updateData.is_acak_soal !== undefined) dataToUpdate.is_acak_soal = updateData.is_acak_soal;
 
-    const updatedUjian = await prisma.ujian.update({
+    const updatedUjian = await prisma.ujians.update({
       where: { ujian_id: parseInt(id) },
-      data: dataToUpdate
+      data: dataToUpdate,
     });
 
     res.json({ message: 'Ujian berhasil diupdate', ujian: updatedUjian });
@@ -201,12 +201,12 @@ const deleteUjian = async (req, res) => {
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
     // Check ujian exists (tanpa check ownership)
-    const ujian = await prisma.ujian.findUnique({
-      where: { ujian_id: parseInt(id) }
+    const ujian = await prisma.ujians.findUnique({
+      where: { ujian_id: parseInt(id) },
     });
     if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
-    await prisma.ujian.delete({ where: { ujian_id: parseInt(id) } });
+    await prisma.ujians.delete({ where: { ujian_id: parseInt(id) } });
 
     res.json({ message: 'Ujian berhasil dihapus' });
   } catch (error) {
@@ -224,20 +224,20 @@ const assignSoalToUjian = async (req, res) => {
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
     // Check ujian exists (tanpa check ownership)
-    const ujian = await prisma.ujian.findUnique({
-      where: { ujian_id }
+    const ujian = await prisma.ujians.findUnique({
+      where: { ujian_id },
     });
     if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
-    const soalUjian = await prisma.soalUjian.create({
+    const soalUjian = await prisma.soal_ujians.create({
       data: {
         ujian_id,
         soal_id,
         bobot_nilai,
-        urutan
-      }
+        urutan,
+      },
     });
-    
+
     res.status(201).json({ message: 'Soal berhasil ditambahkan ke ujian', soalUjian });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -254,21 +254,21 @@ const assignBankToUjian = async (req, res) => {
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
     // Check ujian exists (tanpa check ownership)
-    const ujian = await prisma.ujian.findUnique({
-      where: { ujian_id }
+    const ujian = await prisma.ujians.findUnique({
+      where: { ujian_id },
     });
     if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
     // Get all soal from the bank
     const filters = {
       mata_pelajaran,
-      tingkat
+      tingkat,
     };
     if (jurusan) filters.jurusan = jurusan;
 
-    const soalList = await prisma.soal.findMany({
+    const soalList = await prisma.soals.findMany({
       where: filters,
-      orderBy: { createdAt: 'asc' }
+      orderBy: { createdAt: 'asc' },
     });
 
     if (soalList.length === 0) {
@@ -276,9 +276,9 @@ const assignBankToUjian = async (req, res) => {
     }
 
     // Get max urutan already in ujian
-    const maxUrutanResult = await prisma.soalUjian.aggregate({
+    const maxUrutanResult = await prisma.soal_ujians.aggregate({
       where: { ujian_id },
-      _max: { urutan: true }
+      _max: { urutan: true },
     });
     let currentUrutan = (maxUrutanResult._max.urutan || 0) + 1;
 
@@ -293,18 +293,18 @@ const assignBankToUjian = async (req, res) => {
       ujian_id,
       soal_id: soal.soal_id,
       bobot_nilai: bobot_nilai_default || 10,
-      urutan: currentUrutan++
+      urutan: currentUrutan++,
     }));
 
-    await prisma.soalUjian.createMany({
+    await prisma.soal_ujians.createMany({
       data: soalUjianData,
-      skipDuplicates: true
+      skipDuplicates: true,
     });
 
-    res.status(201).json({ 
+    res.status(201).json({
       message: `${soalList.length} soal dari bank berhasil ditambahkan ke ujian`,
       jumlah_soal: soalList.length,
-      is_acak: is_acak || false
+      is_acak: is_acak || false,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -321,17 +321,17 @@ const removeMultipleSoal = async (req, res) => {
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
     // Check ujian exists (tanpa check ownership)
-    const ujian = await prisma.ujian.findUnique({
-      where: { ujian_id }
+    const ujian = await prisma.ujians.findUnique({
+      where: { ujian_id },
     });
     if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
     // Validate all soal_ujian_ids belong to this ujian
-    const soalUjians = await prisma.soalUjian.findMany({
+    const soalUjians = await prisma.soal_ujians.findMany({
       where: {
         soal_ujian_id: { in: soal_ujian_ids },
-        ujian_id
-      }
+        ujian_id,
+      },
     });
 
     if (soalUjians.length !== soal_ujian_ids.length) {
@@ -339,15 +339,15 @@ const removeMultipleSoal = async (req, res) => {
     }
 
     // Delete multiple soal_ujian
-    await prisma.soalUjian.deleteMany({
+    await prisma.soal_ujians.deleteMany({
       where: {
-        soal_ujian_id: { in: soal_ujian_ids }
-      }
+        soal_ujian_id: { in: soal_ujian_ids },
+      },
     });
 
-    res.json({ 
+    res.json({
       message: `${soal_ujian_ids.length} soal berhasil dihapus dari ujian`,
-      jumlah_dihapus: soal_ujian_ids.length
+      jumlah_dihapus: soal_ujian_ids.length,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -364,8 +364,8 @@ const removeBankFromUjian = async (req, res) => {
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
     // Check ujian exists (tanpa check ownership)
-    const ujian = await prisma.ujian.findUnique({
-      where: { ujian_id }
+    const ujian = await prisma.ujians.findUnique({
+      where: { ujian_id },
     });
     if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
@@ -375,15 +375,15 @@ const removeBankFromUjian = async (req, res) => {
     }
 
     // Find all soal_ujian matching the bank criteria
-    const soalUjians = await prisma.soalUjian.findMany({
+    const soalUjians = await prisma.soal_ujians.findMany({
       where: {
         ujian_id,
-        soal: {
+        soals: {
           mata_pelajaran,
           tingkat,
-          jurusan
-        }
-      }
+          jurusan,
+        },
+      },
     });
 
     if (soalUjians.length === 0) {
@@ -391,15 +391,15 @@ const removeBankFromUjian = async (req, res) => {
     }
 
     // Delete all matching soal_ujian
-    await prisma.soalUjian.deleteMany({
+    await prisma.soal_ujians.deleteMany({
       where: {
-        soal_ujian_id: { in: soalUjians.map(su => su.soal_ujian_id) }
-      }
+        soal_ujian_id: { in: soalUjians.map(su => su.soal_ujian_id) },
+      },
     });
 
-    res.json({ 
+    res.json({
       message: `${soalUjians.length} soal dari bank ${mata_pelajaran}-${tingkat}-${jurusan} berhasil dihapus dari ujian`,
-      jumlah_dihapus: soalUjians.length
+      jumlah_dihapus: soalUjians.length,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -416,24 +416,24 @@ const clearAllSoal = async (req, res) => {
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
     // Check ujian exists (tanpa check ownership)
-    const ujian = await prisma.ujian.findUnique({
-      where: { ujian_id: parseInt(ujianId) }
+    const ujian = await prisma.ujians.findUnique({
+      where: { ujian_id: parseInt(ujianId) },
     });
     if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
     // Count soal before delete
-    const count = await prisma.soalUjian.count({
-      where: { ujian_id: parseInt(ujianId) }
+    const count = await prisma.soal_ujians.count({
+      where: { ujian_id: parseInt(ujianId) },
     });
 
     // Delete all soal_ujian for this ujian
-    await prisma.soalUjian.deleteMany({
-      where: { ujian_id: parseInt(ujianId) }
+    await prisma.soal_ujians.deleteMany({
+      where: { ujian_id: parseInt(ujianId) },
     });
 
-    res.json({ 
+    res.json({
       message: `Semua soal berhasil dihapus dari ujian`,
-      jumlah_dihapus: count
+      jumlah_dihapus: count,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -450,37 +450,37 @@ const getSoalByBank = async (req, res) => {
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
     // Check ujian exists (tanpa check ownership)
-    const ujian = await prisma.ujian.findUnique({
-      where: { ujian_id: parseInt(ujianId) }
+    const ujian = await prisma.ujians.findUnique({
+      where: { ujian_id: parseInt(ujianId) },
     });
     if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
     // Get all soal_ujian with soal details
-    const soalUjians = await prisma.soalUjian.findMany({
+    const soalUjians = await prisma.soal_ujians.findMany({
       where: { ujian_id: parseInt(ujianId) },
       include: {
-        soal: {
+        soals: {
           include: {
-            opsiJawabans: true
-          }
-        }
+            opsi_jawabans: true,
+          },
+        },
       },
-      orderBy: { urutan: 'asc' }
+      orderBy: { urutan: 'asc' },
     });
 
     // Group by bank (mata_pelajaran-tingkat-jurusan)
     const grouped = {};
     soalUjians.forEach(su => {
-      const bankKey = `${su.soal.mata_pelajaran}-${su.soal.tingkat}-${su.soal.jurusan || 'umum'}`;
+      const bankKey = `${su.soals.mata_pelajaran}-${su.soals.tingkat}-${su.soals.jurusan || 'umum'}`;
       if (!grouped[bankKey]) {
         grouped[bankKey] = {
           bank: bankKey,
-          mata_pelajaran: su.soal.mata_pelajaran,
-          tingkat: su.soal.tingkat,
-          jurusan: su.soal.jurusan || 'umum',
+          mata_pelajaran: su.soals.mata_pelajaran,
+          tingkat: su.soals.tingkat,
+          jurusan: su.soals.jurusan || 'umum',
           jumlah_soal: 0,
           total_bobot: 0,
-          soals: []
+          soals: [],
         };
       }
       grouped[bankKey].jumlah_soal++;
@@ -490,19 +490,19 @@ const getSoalByBank = async (req, res) => {
         soal_id: su.soal_id,
         urutan: su.urutan,
         bobot_nilai: su.bobot_nilai,
-        tipe_soal: su.soal.tipe_soal,
-        teks_soal: su.soal.teks_soal,
-        opsi_jawaban: su.soal.opsiJawabans
+        tipe_soal: su.soals.tipe_soal,
+        teks_soal: su.soals.teks_soal,
+        opsi_jawaban: su.soals.opsi_jawabans,
       });
     });
 
     const result = Object.values(grouped);
 
-    res.json({ 
+    res.json({
       ujian_id: parseInt(ujianId),
       total_bank: result.length,
       total_soal: soalUjians.length,
-      banks: result
+      banks: result,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -520,18 +520,18 @@ const updateBobotMultiple = async (req, res) => {
     }
 
     // Validate ujian exists
-    const ujian = await prisma.ujian.findUnique({
-      where: { ujian_id }
+    const ujian = await prisma.ujians.findUnique({
+      where: { ujian_id },
     });
     if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
     // Validate all soal_ujian_ids belong to this ujian
     const soalUjianIds = updates.map(u => u.soal_ujian_id);
-    const soalUjians = await prisma.soalUjian.findMany({
+    const soalUjians = await prisma.soal_ujians.findMany({
       where: {
         soal_ujian_id: { in: soalUjianIds },
-        ujian_id
-      }
+        ujian_id,
+      },
     });
 
     if (soalUjians.length !== updates.length) {
@@ -539,18 +539,18 @@ const updateBobotMultiple = async (req, res) => {
     }
 
     // Update each bobot_nilai
-    const updatePromises = updates.map(u => 
-      prisma.soalUjian.update({
+    const updatePromises = updates.map(u =>
+      prisma.soal_ujians.update({
         where: { soal_ujian_id: u.soal_ujian_id },
-        data: { bobot_nilai: u.bobot_nilai }
+        data: { bobot_nilai: u.bobot_nilai },
       })
     );
 
     await Promise.all(updatePromises);
 
-    res.json({ 
+    res.json({
       message: `Bobot ${updates.length} soal berhasil diupdate`,
-      jumlah_updated: updates.length
+      jumlah_updated: updates.length,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -567,16 +567,16 @@ const removeSoalFromUjian = async (req, res) => {
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
     // Check soal ujian exists (tanpa check ownership)
-    const soalUjian = await prisma.soalUjian.findUnique({
+    const soalUjian = await prisma.soal_ujians.findUnique({
       where: { soal_ujian_id: parseInt(id) },
-      include: { ujian: true }
+      include: { ujians: true },
     });
 
     if (!soalUjian) {
       return res.status(404).json({ error: 'Soal ujian tidak ditemukan' });
     }
 
-    await prisma.soalUjian.delete({ where: { soal_ujian_id: parseInt(id) } });
+    await prisma.soal_ujians.delete({ where: { soal_ujian_id: parseInt(id) } });
 
     res.json({ message: 'Soal berhasil dihapus dari ujian' });
   } catch (error) {
@@ -594,8 +594,8 @@ const assignSiswaToUjian = async (req, res) => {
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
     // Check ujian exists (tanpa check ownership)
-    const ujian = await prisma.ujian.findUnique({
-      where: { ujian_id }
+    const ujian = await prisma.ujians.findUnique({
+      where: { ujian_id },
     });
     if (!ujian) return res.status(404).json({ error: 'Ujian tidak ditemukan' });
 
@@ -604,7 +604,6 @@ const assignSiswaToUjian = async (req, res) => {
     if (jurusan) filters.jurusan = jurusan;
 
     console.log(filters);
-    
 
     const siswaList = await prisma.siswa.findMany({ where: filters });
 
@@ -617,17 +616,17 @@ const assignSiswaToUjian = async (req, res) => {
       ujian_id,
       siswa_id: siswa.siswa_id,
       status_ujian: 'BELUM_MULAI',
-      is_blocked: false
+      is_blocked: false,
     }));
 
-    await prisma.pesertaUjian.createMany({
+    await prisma.peserta_ujians.createMany({
       data: pesertaData,
-      skipDuplicates: true // Hindari duplikat
+      skipDuplicates: true, // Hindari duplikat
     });
 
-    res.status(201).json({ 
+    res.status(201).json({
       message: `${siswaList.length} siswa berhasil ditambahkan ke ujian`,
-      jumlah_siswa: siswaList.length
+      jumlah_siswa: siswaList.length,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

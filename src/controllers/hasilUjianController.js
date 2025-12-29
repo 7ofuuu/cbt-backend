@@ -5,43 +5,43 @@ const getHasilByPeserta = async (req, res) => {
   const { peserta_ujian_id } = req.params;
 
   try {
-    const hasil = await prisma.hasilUjian.findUnique({
+    const hasil = await prisma.hasil_ujians.findUnique({
       where: { peserta_ujian_id: parseInt(peserta_ujian_id) },
       include: {
-        pesertaUjian: {
+        peserta_ujians: {
           include: {
-            siswa: {
+            siswas: {
               select: {
                 siswa_id: true,
                 nama_lengkap: true,
                 kelas: true,
                 tingkat: true,
-                jurusan: true
-              }
+                jurusan: true,
+              },
             },
-            ujian: {
+            ujians: {
               select: {
                 ujian_id: true,
                 nama_ujian: true,
                 mata_pelajaran: true,
                 tanggal_mulai: true,
-                tanggal_selesai: true
-              }
+                tanggal_selesai: true,
+              },
             },
             jawabans: {
               include: {
-                soal: {
+                soals: {
                   select: {
                     soal_id: true,
                     teks_soal: true,
-                    tipe_soal: true
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+                    tipe_soal: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!hasil) {
@@ -61,49 +61,49 @@ const getHasilByUjian = async (req, res) => {
 
   try {
     // Verify ownership
-    const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
+    const guru = await prisma.gurus.findUnique({ where: { userId: guru_id } });
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
-    const ujian = await prisma.ujian.findFirst({
-      where: { ujian_id: parseInt(ujian_id), guru_id: guru.guru_id }
+    const ujian = await prisma.ujians.findFirst({
+      where: { ujian_id: parseInt(ujian_id), guru_id: guru.guru_id },
     });
     if (!ujian) return res.status(403).json({ error: 'Ujian tidak ditemukan atau bukan milik Anda' });
 
     // Get all results for this ujian
-    const hasilList = await prisma.hasilUjian.findMany({
+    const hasilList = await prisma.hasil_ujians.findMany({
       where: {
-        pesertaUjian: {
-          ujian_id: parseInt(ujian_id)
-        }
+        peserta_ujians: {
+          ujian_id: parseInt(ujian_id),
+        },
       },
       include: {
-        pesertaUjian: {
+        peserta_ujians: {
           include: {
-            siswa: {
+            siswas: {
               select: {
                 siswa_id: true,
                 nama_lengkap: true,
                 kelas: true,
                 tingkat: true,
-                jurusan: true
-              }
-            }
-          }
-        }
+                jurusan: true,
+              },
+            },
+          },
+        },
       },
       orderBy: {
-        nilai_akhir: 'desc'
-      }
+        nilai_akhir: 'desc',
+      },
     });
 
-    res.json({ 
+    res.json({
       ujian: {
         ujian_id: ujian.ujian_id,
         nama_ujian: ujian.nama_ujian,
-        mata_pelajaran: ujian.mata_pelajaran
+        mata_pelajaran: ujian.mata_pelajaran,
       },
       total_peserta: hasilList.length,
-      hasil: hasilList 
+      hasil: hasilList,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -115,19 +115,19 @@ const getMyHasil = async (req, res) => {
   const siswa_user_id = req.user.id;
 
   try {
-    const siswa = await prisma.siswa.findUnique({ where: { userId: siswa_user_id } });
+    const siswa = await prisma.siswas.findUnique({ where: { userId: siswa_user_id } });
     if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan' });
 
-    const hasilList = await prisma.hasilUjian.findMany({
+    const hasilList = await prisma.hasil_ujians.findMany({
       where: {
-        pesertaUjian: {
-          siswa_id: siswa.siswa_id
-        }
+        peserta_ujians: {
+          siswa_id: siswa.siswa_id,
+        },
       },
       include: {
-        pesertaUjian: {
+        peserta_ujians: {
           include: {
-            ujian: {
+            ujians: {
               select: {
                 ujian_id: true,
                 nama_ujian: true,
@@ -135,15 +135,15 @@ const getMyHasil = async (req, res) => {
                 tingkat: true,
                 jurusan: true,
                 tanggal_mulai: true,
-                tanggal_selesai: true
-              }
-            }
-          }
-        }
+                tanggal_selesai: true,
+              },
+            },
+          },
+        },
       },
       orderBy: {
-        tanggal_submit: 'desc'
-      }
+        tanggal_submit: 'desc',
+      },
     });
 
     res.json({ hasil: hasilList });
@@ -158,24 +158,24 @@ const calculateAndSaveHasil = async (req, res) => {
 
   try {
     // Get peserta ujian with all answers and soal details
-    const pesertaUjian = await prisma.pesertaUjian.findUnique({
+    const pesertaUjian = await prisma.peserta_ujians.findUnique({
       where: { peserta_ujian_id: parseInt(peserta_ujian_id) },
       include: {
         ujian: {
           include: {
-            soalUjians: true
-          }
+            soalUjians: true,
+          },
         },
         jawabans: {
           include: {
             soal: {
               include: {
-                opsiJawabans: true
-              }
-            }
-          }
-        }
-      }
+                opsiJawabans: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!pesertaUjian) {
@@ -186,11 +186,11 @@ const calculateAndSaveHasil = async (req, res) => {
     let totalNilai = 0;
     let totalBobot = 0;
 
-    for (const soalUjian of pesertaUjian.ujian.soalUjians) {
+    for (const soalUjian of pesertaUjian.ujians.soal_ujians) {
       totalBobot += soalUjian.bobot_nilai;
-      
+
       const jawaban = pesertaUjian.jawabans.find(j => j.soal_id === soalUjian.soal_id);
-      
+
       if (jawaban && jawaban.is_correct) {
         totalNilai += soalUjian.bobot_nilai;
       } else if (jawaban && jawaban.nilai_manual !== null) {
@@ -203,32 +203,32 @@ const calculateAndSaveHasil = async (req, res) => {
     const nilaiAkhir = totalBobot > 0 ? (totalNilai / totalBobot) * 100 : 0;
 
     // Create or update hasil ujian
-    const hasil = await prisma.hasilUjian.upsert({
+    const hasil = await prisma.hasil_ujians.upsert({
       where: { peserta_ujian_id: parseInt(peserta_ujian_id) },
       update: {
         nilai_akhir: nilaiAkhir,
-        tanggal_submit: new Date()
+        tanggal_submit: new Date(),
       },
       create: {
         peserta_ujian_id: parseInt(peserta_ujian_id),
-        nilai_akhir: nilaiAkhir
-      }
+        nilai_akhir: nilaiAkhir,
+      },
     });
 
     // Update peserta ujian status
-    await prisma.pesertaUjian.update({
+    await prisma.peserta_ujians.update({
       where: { peserta_ujian_id: parseInt(peserta_ujian_id) },
-      data: { status_ujian: 'DINILAI' }
+      data: { status_ujian: 'DINILAI' },
     });
 
-    res.json({ 
+    res.json({
       message: 'Hasil ujian berhasil dihitung',
       hasil: {
         hasil_ujian_id: hasil.hasil_ujian_id,
         nilai_akhir: hasil.nilai_akhir,
         total_nilai: totalNilai,
-        total_bobot: totalBobot
-      }
+        total_bobot: totalBobot,
+      },
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -241,44 +241,41 @@ const updateNilaiManual = async (req, res) => {
   const guru_id = req.user.id;
 
   try {
-    const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
+    const guru = await prisma.gurus.findUnique({ where: { userId: guru_id } });
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
     // Get jawaban with ujian ownership check
-    const jawaban = await prisma.jawaban.findUnique({
+    const jawaban = await prisma.jawabans.findUnique({
       where: { jawaban_id: parseInt(jawaban_id) },
       include: {
-        pesertaUjian: {
+        peserta_ujians: {
           include: {
-            ujian: true
-          }
-        }
-      }
+            ujians: true,
+          },
+        },
+      },
     });
 
     if (!jawaban) {
       return res.status(404).json({ error: 'Jawaban tidak ditemukan' });
     }
 
-    if (jawaban.pesertaUjian.ujian.guru_id !== guru.guru_id) {
+    if (jawaban.peserta_ujians.ujians.guru_id !== guru.guru_id) {
       return res.status(403).json({ error: 'Anda tidak memiliki akses ke jawaban ini' });
     }
 
     // Update nilai manual
-    const updatedJawaban = await prisma.jawaban.update({
+    const updatedJawaban = await prisma.jawabans.update({
       where: { jawaban_id: parseInt(jawaban_id) },
-      data: { nilai_manual: parseFloat(nilai_manual) }
+      data: { nilai_manual: parseFloat(nilai_manual) },
     });
 
     // Recalculate hasil ujian
-    await calculateAndSaveHasil(
-      { body: { peserta_ujian_id: jawaban.peserta_ujian_id } }, 
-      { json: () => {} }
-    );
+    await calculateAndSaveHasil({ body: { peserta_ujian_id: jawaban.peserta_ujian_id } }, { json: () => {} });
 
-    res.json({ 
+    res.json({
       message: 'Nilai manual berhasil diupdate',
-      jawaban: updatedJawaban 
+      jawaban: updatedJawaban,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -290,38 +287,38 @@ const getDetailedResult = async (req, res) => {
   const { peserta_ujian_id } = req.params;
 
   try {
-    const hasil = await prisma.hasilUjian.findUnique({
+    const hasil = await prisma.hasil_ujians.findUnique({
       where: { peserta_ujian_id: parseInt(peserta_ujian_id) },
       include: {
-        pesertaUjian: {
+        peserta_ujians: {
           include: {
-            siswa: true,
-            ujian: {
+            siswas: true,
+            ujians: {
               include: {
-                soalUjians: {
+                soal_ujians: {
                   include: {
-                    soal: {
+                    soals: {
                       include: {
-                        opsiJawabans: true
-                      }
-                    }
+                        opsi_jawabans: true,
+                      },
+                    },
                   },
-                  orderBy: { urutan: 'asc' }
-                }
-              }
+                  orderBy: { urutan: 'asc' },
+                },
+              },
             },
             jawabans: {
               include: {
-                soal: {
+                soals: {
                   include: {
-                    opsiJawabans: true
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+                    opsi_jawabans: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!hasil) {
@@ -329,16 +326,16 @@ const getDetailedResult = async (req, res) => {
     }
 
     // Map jawabans to soal for easier review
-    const detailedReview = hasil.pesertaUjian.ujian.soalUjians.map(soalUjian => {
-      const jawaban = hasil.pesertaUjian.jawabans.find(j => j.soal_id === soalUjian.soal_id);
-      
+    const detailedReview = hasil.peserta_ujians.ujians.soal_ujians.map(soalUjian => {
+      const jawaban = hasil.peserta_ujians.jawabans.find(j => j.soal_id === soalUjian.soal_id);
+
       return {
         urutan: soalUjian.urutan,
-        soal: soalUjian.soal,
+        soal: soalUjian.soals,
         bobot_nilai: soalUjian.bobot_nilai,
         jawaban: jawaban || null,
         is_correct: jawaban?.is_correct,
-        nilai_didapat: jawaban?.is_correct ? soalUjian.bobot_nilai : (jawaban?.nilai_manual || 0)
+        nilai_didapat: jawaban?.is_correct ? soalUjian.bobot_nilai : jawaban?.nilai_manual || 0,
       };
     });
 
@@ -346,15 +343,15 @@ const getDetailedResult = async (req, res) => {
       hasil_ujian: {
         hasil_ujian_id: hasil.hasil_ujian_id,
         nilai_akhir: hasil.nilai_akhir,
-        tanggal_submit: hasil.tanggal_submit
+        tanggal_submit: hasil.tanggal_submit,
       },
-      siswa: hasil.pesertaUjian.siswa,
+      siswa: hasil.peserta_ujians.siswas,
       ujian: {
-        ujian_id: hasil.pesertaUjian.ujian.ujian_id,
-        nama_ujian: hasil.pesertaUjian.ujian.nama_ujian,
-        mata_pelajaran: hasil.pesertaUjian.ujian.mata_pelajaran
+        ujian_id: hasil.peserta_ujians.ujians.ujian_id,
+        nama_ujian: hasil.peserta_ujians.ujians.nama_ujian,
+        mata_pelajaran: hasil.peserta_ujians.ujians.mata_pelajaran,
       },
-      review: detailedReview
+      review: detailedReview,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
