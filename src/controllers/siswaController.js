@@ -67,7 +67,7 @@ const startUjian = async (req, res) => {
   const siswa_user_id = req.user.id;
 
   try {
-    const siswa = await prisma.siswas.findUnique({
+    const siswa = await prisma.siswa.findUnique({
       where: { userId: siswa_user_id },
     });
 
@@ -133,8 +133,8 @@ const startUjian = async (req, res) => {
 
     // Check ujian time window
     const now = new Date();
-    const tanggalMulai = new Date(pesertaUjian.ujian.tanggal_mulai);
-    const tanggalSelesai = new Date(pesertaUjian.ujian.tanggal_selesai);
+    const tanggalMulai = new Date(pesertaUjian.ujians.tanggal_mulai);
+    const tanggalSelesai = new Date(pesertaUjian.ujians.tanggal_selesai);
 
     if (now < tanggalMulai) {
       return res.status(400).json({
@@ -411,7 +411,7 @@ const finishUjian = async (req, res) => {
   const siswa_user_id = req.user.id;
 
   try {
-    const siswa = await prisma.siswas.findUnique({
+    const siswa = await prisma.siswa.findUnique({
       where: { userId: siswa_user_id },
     });
 
@@ -549,13 +549,13 @@ const finishUjian = async (req, res) => {
       user_id: siswa.userId,
       peserta_ujian_id: parseInt(peserta_ujian_id),
       activity_type: 'FINISH_UJIAN',
-      description: `Menyelesaikan ujian: ${pesertaUjian.ujian.nama_ujian}`,
+      description: `Menyelesaikan ujian: ${pesertaUjian.ujians.nama_ujian}`,
       ip_address: activityLogService.getIpAddress(req),
       user_agent: activityLogService.getUserAgent(req),
       metadata: {
         ujian_id: pesertaUjian.ujian_id,
         nilai_akhir: nilaiAkhir,
-        total_soal: pesertaUjian.ujian.soalUjians.length,
+        total_soal: pesertaUjian.ujians.soal_ujians.length,
         soal_terjawab: pesertaUjian.jawabans.length,
         has_essay: hasEssay,
         waktu_selesai: new Date(),
@@ -568,7 +568,7 @@ const finishUjian = async (req, res) => {
         hasil_ujian_id: hasil.hasil_ujian_id,
         nilai_akhir: nilaiAkhir,
         status: hasEssay ? 'Menunggu penilaian essay oleh guru' : 'Selesai dinilai',
-        total_soal: pesertaUjian.ujian.soalUjians.length,
+        total_soal: pesertaUjian.ujians.soal_ujians.length,
         soal_terjawab: pesertaUjian.jawabans.length,
       },
     });
