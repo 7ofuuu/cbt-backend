@@ -114,4 +114,106 @@ const login = async (req, res) => {
   }
 };
 
-module.exports = { register, login };
+// Get current authenticated user profile
+const me = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { siswa: true, guru: true, admin: true },
+    });
+
+    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
+
+    let profileData = null;
+    if (user.role === 'siswa') profileData = user.siswa;
+    else if (user.role === 'guru') profileData = user.guru;
+    else if (user.role === 'admin') profileData = user.admin;
+
+    res.json({
+      message: 'Profile fetched',
+      token: '',
+      user: {
+        id: user.id,
+        role: user.role,
+        profile: profileData,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Update profile for authenticated user
+const updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { nama_lengkap, kelas, tingkat, jurusan } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
+
+    let updatedProfile = null;
+
+    if (user.role === 'siswa') {
+      const siswa = await prisma.siswa.findUnique({ where: { userId } });
+      if (!siswa) return res.status(404).json({ error: 'Profil siswa tidak ditemukan' });
+
+      updatedProfile = await prisma.siswa.update({
+        where: { userId },
+        data: {
+          ...(nama_lengkap !== undefined && { nama_lengkap }),
+          ...(kelas !== undefined && { kelas }),
+          ...(tingkat !== undefined && { tingkat }),
+          ...(jurusan !== undefined && { jurusan }),
+        },
+      });
+    } else if (user.role === 'guru') {
+      const guru = await prisma.guru.findUnique({ where: { userId } });
+      if (!guru) return res.status(404).json({ error: 'Profil guru tidak ditemukan' });
+
+      updatedProfile = await prisma.guru.update({
+        where: { userId },
+        data: {
+          ...(nama_lengkap !== undefined && { nama_lengkap }),
+        },
+      });
+    } else if (user.role === 'admin') {
+      const admin = await prisma.admin.findUnique({ where: { userId } });
+      if (!admin) return res.status(404).json({ error: 'Profil admin tidak ditemukan' });
+
+      updatedProfile = await prisma.admin.update({
+        where: { userId },
+        data: {
+          ...(nama_lengkap !== undefined && { nama_lengkap }),
+        },
+      });
+    }
+
+    // Return updated user object similar to login response
+    const freshUser = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { siswa: true, guru: true, admin: true },
+    });
+
+    let profileData = null;
+    if (freshUser.role === 'siswa') profileData = freshUser.siswa;
+    else if (freshUser.role === 'guru') profileData = freshUser.guru;
+    else if (freshUser.role === 'admin') profileData = freshUser.admin;
+
+    res.json({
+      message: 'Profile updated',
+      token: '',
+      user: {
+        id: freshUser.id,
+        role: freshUser.role,
+        profile: profileData,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+module.exports = { register, login, me, updateProfile };
