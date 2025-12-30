@@ -1,6 +1,5 @@
 // src/controllers/activityController.js
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../config/db');
 
 // Helper function to generate random unlock code (5 characters)
 const generateUnlockCode = () => {
@@ -19,15 +18,15 @@ exports.getAllActivities = async (req, res) => {
 
     // Build where clause
     let whereClause = {};
-    
+
     if (jurusan && jurusan !== 'all') {
       whereClause.jurusan = jurusan;
     }
-    
+
     if (kelas && kelas !== 'all') {
       whereClause.tingkat = kelas;
     }
-    
+
     // Filter by jenis_ujian (exam type)
     if (jenis_ujian && jenis_ujian !== 'all') {
       if (jenis_ujian === 'Ujian Akhir Semester') {
@@ -51,7 +50,7 @@ exports.getAllActivities = async (req, res) => {
           include: {
             siswas: {
               include: {
-                users: true
+                user: true
               }
             }
           },
@@ -63,7 +62,7 @@ exports.getAllActivities = async (req, res) => {
         },
         gurus: {
           include: {
-            users: true
+            user: true
           }
         }
       },
@@ -77,12 +76,12 @@ exports.getAllActivities = async (req, res) => {
       const now = new Date();
       const mulai = new Date(ujian.tanggal_mulai);
       const selesai = new Date(ujian.tanggal_selesai);
-      
+
       let jenisUjian = 'Ujian Tengah Semester';
       if (ujian.nama_ujian.toLowerCase().includes('akhir')) {
         jenisUjian = 'Ujian Akhir Semester';
       }
-      
+
       // Determine exam status based on current time
       let examStatus = 'Belum Mulai';
       if (now >= mulai && now <= selesai) {
@@ -166,7 +165,7 @@ exports.getExamParticipants = async (req, res) => {
       include: {
         siswas: {
           include: {
-            users: true
+            user: true
           }
         },
         ujians: true
@@ -251,7 +250,7 @@ exports.getParticipantDetail = async (req, res) => {
       include: {
         siswas: {
           include: {
-            users: true
+            user: true
           }
         },
         ujians: true
@@ -324,7 +323,7 @@ exports.blockParticipant = async (req, res) => {
       include: {
         siswas: {
           include: {
-            users: true
+            user: true
           }
         },
         ujians: true
@@ -378,7 +377,7 @@ exports.generateUnlockCode = async (req, res) => {
     // Generate unique unlock code
     let unlockCode;
     let isUnique = false;
-    
+
     while (!isUnique) {
       unlockCode = generateUnlockCode();
       const existing = await prisma.peserta_ujians.findFirst({
@@ -398,7 +397,7 @@ exports.generateUnlockCode = async (req, res) => {
       include: {
         siswas: {
           include: {
-            users: true
+            user: true
           }
         }
       }
@@ -472,7 +471,7 @@ exports.unblockParticipant = async (req, res) => {
       include: {
         siswas: {
           include: {
-            users: true
+            user: true
           }
         }
       }
