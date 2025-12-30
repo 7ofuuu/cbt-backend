@@ -3,14 +3,15 @@ const bcrypt = require('bcryptjs');
 
 // Get All Users (Admin only)
 const getAllUsers = async (req, res) => {
-  const { role, status_aktif } = req.query;
+  const { role, status_aktif, username } = req.query;
 
   try {
     const filters = {};
     if (role) filters.role = role;
     if (status_aktif !== undefined) filters.status_aktif = status_aktif === 'true';
+    if (username) filters.username = username;
 
-    const users = await prisma.users.findMany({
+    const users = await prisma.user.findMany({
       where: filters,
       include: {
         admin: true,
@@ -29,6 +30,30 @@ const getAllUsers = async (req, res) => {
 // Create User (Admin only) - sama seperti register
 const createUser = async (req, res) => {
   const { username, password, role, nama, kelas, tingkat, jurusan } = req.body;
+
+  // Validate required fields
+  if (!username || !password || !role || !nama) {
+    return res.status(400).json({
+      error: 'Data tidak lengkap. Username, password, role, dan nama wajib diisi.'
+    });
+  }
+
+  // Validate role-specific fields
+  if (role === 'siswa' && (!kelas || !tingkat || !jurusan)) {
+    return res.status(400).json({
+      error: 'Data siswa tidak lengkap. Kelas, tingkat, dan jurusan wajib diisi untuk siswa.'
+    });
+  }
+
+  // Validate kelas format for siswa (must be "IPA 01" or "IPS 02" format)
+  if (role === 'siswa') {
+    const kelasPattern = /^(IPA|IPS)\s+(0[1-9]|[1-9][0-9])$/;
+    if (!kelasPattern.test(kelas)) {
+      return res.status(400).json({
+        error: 'Format kelas tidak valid. Gunakan format: IPA/IPS diikuti spasi dan nomor kelas (contoh: IPA 01, IPS 02)'
+      });
+    }
+  }
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -73,6 +98,7 @@ const createUser = async (req, res) => {
 
     res.status(201).json({ message: 'User berhasil dibuat', userId: result.id });
   } catch (error) {
+    console.error('Error creating user:', error);
     if (error.code === 'P2002') {
       return res.status(400).json({ error: 'Username sudah digunakan' });
     }
@@ -91,7 +117,7 @@ const updateUserRole = async (req, res) => {
       return res.status(400).json({ error: 'Role tidak valid' });
     }
 
-    const user = await prisma.users.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: parseInt(id) },
       include: { admins: true, gurus: true, siswas: true },
     });
@@ -144,10 +170,10 @@ const toggleUserStatus = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const user = await prisma.users.findUnique({ where: { id: parseInt(id) } });
+    const user = await prisma.user.findUnique({ where: { id: parseInt(id) } });
     if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
 
-    const updated = await prisma.users.update({
+    const updated = await prisma.user.update({
       where: { id: parseInt(id) },
       data: { status_aktif: !user.status_aktif },
     });
@@ -166,10 +192,10 @@ const deleteUser = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const user = await prisma.users.findUnique({ where: { id: parseInt(id) } });
+    const user = await prisma.user.findUnique({ where: { id: parseInt(id) } });
     if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
 
-    await prisma.users.delete({ where: { id: parseInt(id) } });
+    await prisma.user.delete({ where: { id: parseInt(id) } });
 
     res.json({ message: 'User berhasil dihapus' });
   } catch (error) {
@@ -342,8 +368,21 @@ const batchCreateUsers = async (req, res) => {
           continue;
         }
 
+        // Validate kelas format for siswa
+        if (role === 'siswa') {
+          const kelasPattern = /^(IPA|IPS)\s+(0[1-9]|[1-9][0-9])$/;
+          if (!kelasPattern.test(kelas)) {
+            results.failed++;
+            results.errors.push({
+              username,
+              error: `Format kelas tidak valid: "${kelas}". Gunakan format: IPA/IPS + spasi + nomor (contoh: IPA 01)`
+            });
+            continue;
+          }
+        }
+
         // Check if username already exists
-        const existingUser = await prisma.users.findUnique({
+        const existingUser = await prisma.user.findUnique({
           where: { username },
         });
 
@@ -413,11 +452,11 @@ const batchCreateUsers = async (req, res) => {
   }
 };
 
-module.exports = { 
-  getAllUsers, 
+module.exports = {
+  getAllUsers,
   createUser,
   batchCreateUsers,
-  updateUserRole, 
+  updateUserRole,
   toggleUserStatus,
   deleteUser,
   nilaiJawaban,
