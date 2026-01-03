@@ -832,17 +832,18 @@ Authorization: Bearer <token>
         "tanggal_mulai": "2025-12-26T08:00:00.000Z",
         "tanggal_selesai": "2025-12-26T10:00:00.000Z",
         "durasi_menit": 90,
+        "status_ujian": "TERJADWAL",
         "is_acak_soal": false
       },
       "hasil": null
     },
     {
       "peserta_ujian_id": 8,
-      "status_ujian": "DINILAI",
+      "status_ujian": "SEDANG_DIKERJAKAN",
       "is_blocked": false,
       "unlock_code": null,
       "waktu_mulai": "2025-12-20T08:15:00.000Z",
-      "waktu_selesai": "2025-12-20T09:30:00.000Z",
+      "waktu_selesai": null,
       "ujian": {
         "ujian_id": 1,
         "nama_ujian": "Ujian Fisika",
@@ -852,22 +853,30 @@ Authorization: Bearer <token>
         "tanggal_mulai": "2025-12-20T08:00:00.000Z",
         "tanggal_selesai": "2025-12-20T10:00:00.000Z",
         "durasi_menit": 90,
+        "status_ujian": "BERLANGSUNG",
         "is_acak_soal": true
       },
-      "hasil": {
-        "nilai_akhir": 85.5,
-        "tanggal_submit": "2025-12-20T09:30:00.000Z"
-      }
+      "hasil": null
     }
   ]
 }
 ```
 
-**Status Ujian:**
+**Notes:**
+- Siswa hanya dapat melihat ujian dengan status `TERJADWAL` atau `BERLANGSUNG`
+- Ujian dengan status `BERAKHIR` tidak akan ditampilkan
+- Filter ini memastikan siswa hanya fokus pada ujian yang sedang aktif
+
+**Status Ujian (Peserta):**
 - `BELUM_MULAI` - Ujian belum dikerjakan
 - `SEDANG_DIKERJAKAN` - Sedang mengerjakan
 - `SELESAI` - Sudah submit, menunggu grading essay
 - `DINILAI` - Nilai sudah final
+
+**Status Ujian (Master):**
+- `TERJADWAL` - Ujian yang sudah dijadwalkan
+- `BERLANGSUNG` - Ujian sedang berlangsung
+- `BERAKHIR` - Ujian sudah berakhir (tidak ditampilkan ke siswa)
 
 ---
 
@@ -1363,6 +1372,81 @@ Nilai Akhir = (27/40) × 100 = 67.5
 - Automatically called after updating nilai_manual
 - Useful if you need to recalculate after fixing data
 - Updates status_ujian to 'DINILAI' after calculation
+
+### 7. Get Completed Ujians (Guru - lihat semua ujian yang sudah selesai)
+**GET** `/hasil-ujian/completed-ujian`
+
+**Headers:** `Authorization: Bearer <token>` (role: guru)
+
+**Response:**
+```json
+{
+  "total_ujian_selesai": 2,
+  "ujians": [
+    {
+      "ujian_id": 1,
+      "nama_ujian": "UAS Matematika Semester 1",
+      "mata_pelajaran": "Matematika",
+      "tingkat": "X",
+      "jurusan": "IPA",
+      "tanggal_mulai": "2025-12-20T08:00:00.000Z",
+      "tanggal_selesai": "2025-12-20T10:00:00.000Z",
+      "durasi_menit": 90,
+      "status_ujian": "BERAKHIR",
+      "statistics": {
+        "total_peserta": 30,
+        "total_selesai": 28,
+        "total_soal": 40,
+        "nilai_tertinggi": 95,
+        "nilai_terendah": 65,
+        "nilai_rata_rata": "82.50"
+      },
+      "peserta_results": [
+        {
+          "peserta_ujian_id": 1,
+          "siswa": {
+            "siswa_id": 1,
+            "nama_lengkap": "Ahmad Fauzi",
+            "kelas": "X-1"
+          },
+          "status_ujian": "DINILAI",
+          "waktu_mulai": "2025-12-20T08:05:00.000Z",
+          "waktu_selesai": "2025-12-20T09:30:00.000Z",
+          "nilai_akhir": 85,
+          "tanggal_submit": "2025-12-20T09:30:00.000Z"
+        },
+        {
+          "peserta_ujian_id": 2,
+          "siswa": {
+            "siswa_id": 2,
+            "nama_lengkap": "Siti Nurhaliza",
+            "kelas": "X-1"
+          },
+          "status_ujian": "SELESAI",
+          "waktu_mulai": "2025-12-20T08:10:00.000Z",
+          "waktu_selesai": "2025-12-20T09:45:00.000Z",
+          "nilai_akhir": 78,
+          "tanggal_submit": "2025-12-20T09:45:00.000Z"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Notes:**
+- Returns only ujians with status `BERAKHIR` that belong to the logged-in guru
+- Includes comprehensive statistics for each ujian
+- Shows detailed results for peserta with status `SELESAI` or `DINILAI`
+- Statistics include:
+  - `total_peserta`: Total assigned participants
+  - `total_selesai`: Number of participants who finished
+  - `total_soal`: Total questions in the exam
+  - `nilai_tertinggi`: Highest score
+  - `nilai_terendah`: Lowest score
+  - `nilai_rata_rata`: Average score
+- Useful for guru to review completed exams and student performance
+- Ordered by `tanggal_selesai` descending (most recent first)
 
 ---
 

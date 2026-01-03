@@ -1,19 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken, checkRole } = require('../middlewares/validationMiddleware');
-const {
-  getHasilByPeserta,
-  getHasilByUjian,
-  getMyHasil,
-  calculateAndSaveHasil,
-  updateNilaiManual,
-  getDetailedResult
-} = require('../controllers/hasilUjianController');
+const { getHasilByPeserta, getHasilByUjian, getMyHasil, calculateAndSaveHasil, updateNilaiManual, getDetailedResult, getCompletedUjians } = require('../controllers/hasilUjianController');
 
 // Student routes - get their own results
 router.get('/my-hasil', verifyToken, checkRole('siswa'), getMyHasil);
 
 // Guru routes - manage and view results
+router.get('/completed-ujian', verifyToken, checkRole('guru'), getCompletedUjians);
 router.get('/ujian/:ujian_id', verifyToken, checkRole('guru'), getHasilByUjian);
 router.get('/peserta/:peserta_ujian_id', verifyToken, checkRole('guru'), getHasilByPeserta);
 router.get('/detail/:peserta_ujian_id', verifyToken, checkRole('guru'), getDetailedResult);
