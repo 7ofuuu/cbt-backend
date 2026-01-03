@@ -358,11 +358,116 @@ const getDetailedResult = async (req, res) => {
   }
 };
 
+// Get All Completed Ujians (for Guru)
+const getCompletedUjians = async (req, res) => {
+  const guru_id = req.user.id;
+
+  try {
+    const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
+    if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
+
+    // Get ujians that are completed (BERAKHIR status)
+    const completedUjians = await prisma.ujians.findMany({
+      where: {
+        guru_id: guru.guru_id,
+        status_ujian: 'BERAKHIR',
+      },
+      include: {
+        _count: {
+          select: {
+            peserta_ujians: true,
+            soal_ujians: true,
+          },
+        },
+        peserta_ujians: {
+          where: {
+            status_ujian: {
+              in: ['SELESAI', 'DINILAI'],
+            },
+          },
+          include: {
+            hasil_ujians: {
+              select: {
+                nilai_akhir: true,
+                tanggal_submit: true,
+              },
+            },
+            siswas: {
+              select: {
+                siswa_id: true,
+                nama_lengkap: true,
+                kelas: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        tanggal_selesai: 'desc',
+      },
+    });
+
+    // Format response with statistics
+    const formattedUjians = completedUjians.map(ujian => {
+      const totalPeserta = ujian._count.peserta_ujians;
+      const pesertaSelesai = ujian.peserta_ujians.length;
+      const nilaiList = ujian.peserta_ujians
+        .filter(p => p.hasil_ujians)
+        .map(p => p.hasil_ujians.nilai_akhir);
+
+      const statistics = {
+        total_peserta: totalPeserta,
+        total_selesai: pesertaSelesai,
+        total_soal: ujian._count.soal_ujians,
+        nilai_tertinggi: nilaiList.length > 0 ? Math.max(...nilaiList) : 0,
+        nilai_terendah: nilaiList.length > 0 ? Math.min(...nilaiList) : 0,
+        nilai_rata_rata: nilaiList.length > 0 
+          ? (nilaiList.reduce((a, b) => a + b, 0) / nilaiList.length).toFixed(2)
+          : 0,
+      };
+
+      return {
+        ujian_id: ujian.ujian_id,
+        nama_ujian: ujian.nama_ujian,
+        mata_pelajaran: ujian.mata_pelajaran,
+        tingkat: ujian.tingkat,
+        jurusan: ujian.jurusan,
+        tanggal_mulai: ujian.tanggal_mulai,
+        tanggal_selesai: ujian.tanggal_selesai,
+        durasi_menit: ujian.durasi_menit,
+        status_ujian: ujian.status_ujian,
+        statistics,
+        peserta_results: ujian.peserta_ujians.map(p => ({
+          peserta_ujian_id: p.peserta_ujian_id,
+          siswa: {
+            siswa_id: p.siswas.siswa_id,
+            nama_lengkap: p.siswas.nama_lengkap,
+            kelas: p.siswas.kelas,
+          },
+          status_ujian: p.status_ujian,
+          waktu_mulai: p.waktu_mulai,
+          waktu_selesai: p.waktu_selesai,
+          nilai_akhir: p.hasil_ujians?.nilai_akhir || null,
+          tanggal_submit: p.hasil_ujians?.tanggal_submit || null,
+        })),
+      };
+    });
+
+    res.json({
+      total_ujian_selesai: formattedUjians.length,
+      ujians: formattedUjians,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   getHasilByPeserta,
   getHasilByUjian,
   getMyHasil,
   calculateAndSaveHasil,
   updateNilaiManual,
-  getDetailedResult
+  getDetailedResult,
+  getCompletedUjians
 };
