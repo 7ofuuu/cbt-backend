@@ -14,7 +14,7 @@ const generateUnlockCode = () => {
 // GET /api/admin/activities - Get all active exams with participants
 exports.getAllActivities = async (req, res) => {
   try {
-    const { jurusan, kelas, status, jenis_ujian } = req.query;
+    const { jurusan, kelas, jenis_ujian } = req.query;
 
     // Build where clause
     let whereClause = {};
@@ -43,6 +43,7 @@ exports.getAllActivities = async (req, res) => {
     }
 
     // Get all exams with their participants
+    // Note: We don't filter by status here since the frontend filters by exam time-based status
     const ujians = await prisma.ujians.findMany({
       where: whereClause,
       include: {
@@ -53,12 +54,7 @@ exports.getAllActivities = async (req, res) => {
                 user: true
               }
             }
-          },
-          where: status && status !== 'all' ? {
-            ...(status === 'BLOCKED' && { is_blocked: true }),
-            ...(status === 'ON_PROGRESS' && { status_ujian: 'SEDANG_DIKERJAKAN', is_blocked: false }),
-            ...(status === 'SUBMITTED' && { status_ujian: 'SELESAI', is_blocked: false }),
-          } : undefined
+          }
         },
         gurus: {
           include: {
