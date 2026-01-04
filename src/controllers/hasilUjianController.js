@@ -161,16 +161,16 @@ const calculateAndSaveHasil = async (req, res) => {
     const pesertaUjian = await prisma.peserta_ujians.findUnique({
       where: { peserta_ujian_id: parseInt(peserta_ujian_id) },
       include: {
-        ujian: {
+        ujians: {
           include: {
-            soalUjians: true,
+            soal_ujians: true,
           },
         },
         jawabans: {
           include: {
-            soal: {
+            soals: {
               include: {
-                opsiJawabans: true,
+                opsi_jawabans: true,
               },
             },
           },
@@ -195,7 +195,8 @@ const calculateAndSaveHasil = async (req, res) => {
         totalNilai += soalUjian.bobot_nilai;
       } else if (jawaban && jawaban.nilai_manual !== null) {
         // For essay questions graded manually
-        totalNilai += jawaban.nilai_manual;
+        const percentageOfBobot = (jawaban.nilai_manual / 100) * soalUjian.bobot_nilai;
+        totalNilai += percentageOfBobot;
       }
     }
 
@@ -241,7 +242,7 @@ const updateNilaiManual = async (req, res) => {
   const guru_id = req.user.id;
 
   try {
-    const guru = await prisma.gurus.findUnique({ where: { userId: guru_id } });
+    const guru = await prisma.guru.findUnique({ where: { userId: guru_id } });
     if (!guru) return res.status(404).json({ error: 'Guru tidak ditemukan' });
 
     // Get jawaban with ujian ownership check
@@ -269,9 +270,6 @@ const updateNilaiManual = async (req, res) => {
       where: { jawaban_id: parseInt(jawaban_id) },
       data: { nilai_manual: parseFloat(nilai_manual) },
     });
-
-    // Recalculate hasil ujian
-    await calculateAndSaveHasil({ body: { peserta_ujian_id: jawaban.peserta_ujian_id } }, { json: () => {} });
 
     res.json({
       message: 'Nilai manual berhasil diupdate',
