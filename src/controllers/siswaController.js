@@ -289,7 +289,7 @@ const submitJawaban = async (req, res) => {
     }
 
     // Verify ownership
-    const pesertaUjian = await prisma.pesertaUjian.findFirst({
+    const pesertaUjian = await prisma.peserta_ujians.findFirst({
       where: {
         peserta_ujian_id: parseInt(peserta_ujian_id),
         siswa_id: siswa.siswa_id,
