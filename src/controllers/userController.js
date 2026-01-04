@@ -45,12 +45,44 @@ const createUser = async (req, res) => {
     });
   }
 
-  // Validate kelas format for siswa (must be "IPA 01" or "IPS 02" format)
+  // Validate tingkat value
+  const validTingkats = ['X', 'XI', 'XII'];
+  if (role === 'siswa' && !validTingkats.includes(tingkat)) {
+    return res.status(400).json({
+      error: `Tingkat tidak valid. Pilih salah satu: ${validTingkats.join(', ')}`
+    });
+  }
+
+  // Validate jurusan value
+  const validJurusans = ['IPA', 'IPS', 'Bahasa'];
+  if (role === 'siswa' && !validJurusans.includes(jurusan)) {
+    return res.status(400).json({
+      error: `Jurusan tidak valid. Pilih salah satu: ${validJurusans.join(', ')}`
+    });
+  }
+
+  // Validate kelas format for siswa (must be "X-IPA-1" or "XII-IPS-2" format)
   if (role === 'siswa') {
-    const kelasPattern = /^(IPA|IPS)\s+(0[1-9]|[1-9][0-9])$/;
+    // Format: tingkat-jurusan-nomor (contoh: XII-IPA-1, X-IPS-2)
+    const kelasPattern = /^(X|XI|XII)-(IPA|IPS|Bahasa)-(\d+)$/;
     if (!kelasPattern.test(kelas)) {
       return res.status(400).json({
-        error: 'Format kelas tidak valid. Gunakan format: IPA/IPS diikuti spasi dan nomor kelas (contoh: IPA 01, IPS 02)'
+        error: 'Format kelas tidak valid. Gunakan format: tingkat-jurusan-nomor (contoh: XII-IPA-1, X-IPS-2)'
+      });
+    }
+
+    // Validate consistency: kelas must match tingkat and jurusan
+    const [, kelasTingkat, kelasJurusan] = kelas.match(kelasPattern);
+    
+    if (kelasTingkat !== tingkat) {
+      return res.status(400).json({
+        error: `Tingkat pada kelas (${kelasTingkat}) tidak sesuai dengan tingkat yang dipilih (${tingkat})`
+      });
+    }
+
+    if (kelasJurusan !== jurusan) {
+      return res.status(400).json({
+        error: `Jurusan pada kelas (${kelasJurusan}) tidak sesuai dengan jurusan yang dipilih (${jurusan})`
       });
     }
   }
@@ -368,14 +400,51 @@ const batchCreateUsers = async (req, res) => {
           continue;
         }
 
-        // Validate kelas format for siswa
+        // Validate tingkat value
+        const validTingkats = ['X', 'XI', 'XII'];
+        if (role === 'siswa' && !validTingkats.includes(tingkat)) {
+          results.failed++;
+          results.errors.push({ username, error: `Tingkat tidak valid: "${tingkat}". Pilih: ${validTingkats.join(', ')}` });
+          continue;
+        }
+
+        // Validate jurusan value
+        const validJurusans = ['IPA', 'IPS', 'Bahasa'];
+        if (role === 'siswa' && !validJurusans.includes(jurusan)) {
+          results.failed++;
+          results.errors.push({ username, error: `Jurusan tidak valid: "${jurusan}". Pilih: ${validJurusans.join(', ')}` });
+          continue;
+        }
+
+        // Validate kelas format for siswa (tingkat-jurusan-nomor)
         if (role === 'siswa') {
-          const kelasPattern = /^(IPA|IPS)\s+(0[1-9]|[1-9][0-9])$/;
+          const kelasPattern = /^(X|XI|XII)-(IPA|IPS|Bahasa)-(\d+)$/;
           if (!kelasPattern.test(kelas)) {
             results.failed++;
             results.errors.push({
               username,
-              error: `Format kelas tidak valid: "${kelas}". Gunakan format: IPA/IPS + spasi + nomor (contoh: IPA 01)`
+              error: `Format kelas tidak valid: "${kelas}". Gunakan format: tingkat-jurusan-nomor (contoh: XII-IPA-1)`
+            });
+            continue;
+          }
+
+          // Validate consistency: kelas must match tingkat and jurusan
+          const [, kelasTingkat, kelasJurusan] = kelas.match(kelasPattern);
+          
+          if (kelasTingkat !== tingkat) {
+            results.failed++;
+            results.errors.push({
+              username,
+              error: `Tingkat pada kelas (${kelasTingkat}) tidak sesuai dengan tingkat (${tingkat})`
+            });
+            continue;
+          }
+
+          if (kelasJurusan !== jurusan) {
+            results.failed++;
+            results.errors.push({
+              username,
+              error: `Jurusan pada kelas (${kelasJurusan}) tidak sesuai dengan jurusan (${jurusan})`
             });
             continue;
           }
