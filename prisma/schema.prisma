@@ -1,22 +1,12 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "mysql"
-  // url      = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
-// Enum Role
-enum Role {
-  admin
-  guru
-  siswa
-}
-
-// Tabel Utama: USERS
 model User {
   id           Int      @id @default(autoincrement())
   username     String   @unique
@@ -25,48 +15,199 @@ model User {
   status_aktif Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-
-  // Relasi Optional (User mungkin Admin, Guru, ATAU Siswa)
-  admin Admin?
-  guru  Guru?
-  siswa Siswa?
+  admin        Admin?
+  guru         Guru?
+  siswa        Siswa?
 
   @@map("users")
 }
 
-// Tabel Profil: ADMIN
 model Admin {
   admin_id     Int    @id @default(autoincrement())
   nama_lengkap String
-  
   userId       Int    @unique
   user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("admins")
 }
 
-// Tabel Profil: GURU
 model Guru {
-  guru_id      Int    @id @default(autoincrement())
+  guru_id      Int      @id @default(autoincrement())
   nama_lengkap String
-
-  userId       Int    @unique
-  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       Int      @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  soals        soals[]
+  ujians       ujians[]
 
   @@map("gurus")
 }
 
-//   Tabel Profil: SISWA
 model Siswa {
-  siswa_id     Int    @id @default(autoincrement())
-  nama_lengkap String
-  kelas        String
-  tingkat      String
-  jurusan      String
-
-  userId       Int    @unique
-  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  siswa_id       Int              @id @default(autoincrement())
+  nama_lengkap   String
+  kelas          String
+  tingkat        String
+  jurusan        String
+  userId         Int              @unique
+  peserta_ujians peserta_ujians[]
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("siswas")
 }
 
+model ActivityLog {
+  log_id           Int      @id @default(autoincrement())
+  user_id          Int?
+  peserta_ujian_id Int?
+  activity_type    String   @db.VarChar(100)
+  description      String   @db.Text
+  ip_address       String?  @db.VarChar(50)
+  user_agent       String?  @db.Text
+  metadata         String?  @db.LongText
+  created_at       DateTime @default(now())
+
+  @@index([activity_type], map: "idx_activity_type")
+  @@index([created_at], map: "idx_created_at")
+  @@index([peserta_ujian_id], map: "idx_peserta_ujian_id")
+  @@index([user_id], map: "idx_user_id")
+  @@map("activity_logs")
+}
+
+model hasil_ujians {
+  hasil_ujian_id   Int            @id @default(autoincrement())
+  nilai_akhir      Float
+  tanggal_submit   DateTime       @default(now())
+  peserta_ujian_id Int            @unique
+  peserta_ujians   peserta_ujians @relation(fields: [peserta_ujian_id], references: [peserta_ujian_id], onDelete: Cascade)
+}
+
+model jawabans {
+  jawaban_id          Int            @id @default(autoincrement())
+  jawaban_essay_text  String?        @db.Text
+  jawaban_pg_opsi_ids String?        @db.Text
+  is_correct          Boolean?
+  nilai_manual        Float?
+  createdAt           DateTime       @default(now())
+  peserta_ujian_id    Int
+  soal_id             Int
+  peserta_ujians      peserta_ujians @relation(fields: [peserta_ujian_id], references: [peserta_ujian_id], onDelete: Cascade)
+  soals               soals          @relation(fields: [soal_id], references: [soal_id], onDelete: Cascade)
+
+  @@index([peserta_ujian_id], map: "jawabans_peserta_ujian_id_fkey")
+  @@index([soal_id], map: "jawabans_soal_id_fkey")
+}
+
+model migrations {
+  id        Int    @id @default(autoincrement()) @db.UnsignedInt
+  migration String @db.VarChar(255)
+  batch     Int
+}
+
+model opsi_jawabans {
+  opsi_id   Int     @id @default(autoincrement())
+  label     String
+  teks_opsi String  @db.Text
+  is_benar  Boolean @default(false)
+  soal_id   Int
+  soals     soals   @relation(fields: [soal_id], references: [soal_id], onDelete: Cascade)
+
+  @@index([soal_id], map: "opsi_jawabans_soal_id_fkey")
+}
+
+model peserta_ujians {
+  peserta_ujian_id Int                         @id @default(autoincrement())
+  status_ujian     peserta_ujians_status_ujian @default(BELUM_MULAI)
+  waktu_mulai      DateTime?
+  waktu_selesai    DateTime?
+  ujian_id         Int
+  siswa_id         Int
+  is_blocked       Boolean                     @default(false)
+  block_reason     String?                     @db.Text
+  unlock_code      String?                     @unique
+  hasil_ujians     hasil_ujians?
+  jawabans         jawabans[]
+  siswas           Siswa                       @relation(fields: [siswa_id], references: [siswa_id], onDelete: Cascade)
+  ujians           ujians                      @relation(fields: [ujian_id], references: [ujian_id], onDelete: Cascade)
+
+  @@index([siswa_id], map: "peserta_ujians_siswa_id_fkey")
+  @@index([ujian_id], map: "peserta_ujians_ujian_id_fkey")
+}
+
+model soal_ujians {
+  soal_ujian_id Int    @id @default(autoincrement())
+  bobot_nilai   Int
+  urutan        Int
+  ujian_id      Int
+  soal_id       Int
+  soals         soals  @relation(fields: [soal_id], references: [soal_id], onDelete: Cascade)
+  ujians        ujians @relation(fields: [ujian_id], references: [ujian_id], onDelete: Cascade)
+
+  @@index([soal_id], map: "soal_ujians_soal_id_fkey")
+  @@index([ujian_id], map: "soal_ujians_ujian_id_fkey")
+}
+
+model soals {
+  soal_id         Int             @id @default(autoincrement())
+  tipe_soal       soals_tipe_soal
+  teks_soal       String          @db.Text
+  mata_pelajaran  String
+  tingkat         String
+  jurusan         String?
+  soal_gambar     String?
+  soal_pembahasan String?         @db.Text
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  guru_id         Int
+  jawabans        jawabans[]
+  opsi_jawabans   opsi_jawabans[]
+  soal_ujians     soal_ujians[]
+  gurus           Guru            @relation(fields: [guru_id], references: [guru_id], onDelete: Cascade)
+
+  @@index([guru_id], map: "soals_guru_id_fkey")
+}
+
+model ujians {
+  ujian_id        Int                     @id @default(autoincrement())
+  nama_ujian      String
+  mata_pelajaran  String
+  tingkat         String
+  jurusan         String?
+  tanggal_mulai   DateTime
+  tanggal_selesai DateTime
+  durasi_menit    Int
+  is_acak_soal    Boolean                 @default(false)
+  status_ujian    ujians_status_ujian     @default(TERJADWAL)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  guru_id         Int
+  peserta_ujians  peserta_ujians[]
+  soal_ujians     soal_ujians[]
+  gurus           Guru                    @relation(fields: [guru_id], references: [guru_id], onDelete: Cascade)
+
+  @@index([guru_id], map: "ujians_guru_id_fkey")
+}
+
+enum Role {
+  admin
+  guru
+  siswa
+}
+
+enum peserta_ujians_status_ujian {
+  BELUM_MULAI
+  SEDANG_DIKERJAKAN
+  SELESAI
+  DINILAI
+}
+
+enum ujians_status_ujian {
+  TERJADWAL
+  BERLANGSUNG
+  BERAKHIR
+}
+
+enum soals_tipe_soal {
+  PILIHAN_GANDA_SINGLE
+  PILIHAN_GANDA_MULTIPLE
+  ESSAY
+}

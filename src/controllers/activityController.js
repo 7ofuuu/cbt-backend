@@ -1,6 +1,5 @@
 // src/controllers/activityController.js
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../config/db');
 
 // Helper function to generate random unlock code (5 characters)
 const generateUnlockCode = () => {
@@ -15,19 +14,19 @@ const generateUnlockCode = () => {
 // GET /api/admin/activities - Get all active exams with participants
 exports.getAllActivities = async (req, res) => {
   try {
-    const { jurusan, kelas, status, jenis_ujian } = req.query;
+    const { jurusan, kelas, jenis_ujian } = req.query;
 
     // Build where clause
     let whereClause = {};
-    
+
     if (jurusan && jurusan !== 'all') {
       whereClause.jurusan = jurusan;
     }
-    
+
     if (kelas && kelas !== 'all') {
       whereClause.tingkat = kelas;
     }
-    
+
     // Filter by jenis_ujian (exam type)
     if (jenis_ujian && jenis_ujian !== 'all') {
       if (jenis_ujian === 'Ujian Akhir Semester') {
@@ -44,24 +43,20 @@ exports.getAllActivities = async (req, res) => {
     }
 
     // Get all exams with their participants
-    const ujians = await prisma.ujian.findMany({
+    // Note: We don't filter by status here since the frontend filters by exam time-based status
+    const ujians = await prisma.ujians.findMany({
       where: whereClause,
       include: {
-        pesertaUjians: {
+        peserta_ujians: {
           include: {
-            siswa: {
+            siswas: {
               include: {
                 user: true
               }
             }
-          },
-          where: status && status !== 'all' ? {
-            ...(status === 'BLOCKED' && { is_blocked: true }),
-            ...(status === 'ON_PROGRESS' && { status_ujian: 'SEDANG_DIKERJAKAN', is_blocked: false }),
-            ...(status === 'SUBMITTED' && { status_ujian: 'SELESAI', is_blocked: false }),
-          } : undefined
+          }
         },
-        guru: {
+        gurus: {
           include: {
             user: true
           }
@@ -77,12 +72,12 @@ exports.getAllActivities = async (req, res) => {
       const now = new Date();
       const mulai = new Date(ujian.tanggal_mulai);
       const selesai = new Date(ujian.tanggal_selesai);
-      
+
       let jenisUjian = 'Ujian Tengah Semester';
       if (ujian.nama_ujian.toLowerCase().includes('akhir')) {
         jenisUjian = 'Ujian Akhir Semester';
       }
-      
+
       // Determine exam status based on current time
       let examStatus = 'Belum Mulai';
       if (now >= mulai && now <= selesai) {
@@ -98,7 +93,7 @@ exports.getAllActivities = async (req, res) => {
         jurusan: ujian.jurusan,
         tingkat: ujian.tingkat,
         jenis_ujian: jenisUjian,
-        peserta_count: ujian.pesertaUjians.length,
+        peserta_count: ujian.peserta_ujians.length,
         status: examStatus,
         tanggal_mulai: ujian.tanggal_mulai,
         tanggal_selesai: ujian.tanggal_selesai,
@@ -144,10 +139,10 @@ exports.getExamParticipants = async (req, res) => {
     }
 
     // Get ujian data
-    const ujian = await prisma.ujian.findUnique({
+    const ujian = await prisma.ujians.findUnique({
       where: { ujian_id: parseInt(ujianId) },
       include: {
-        guru: {
+        gurus: {
           include: { user: true }
         }
       }
@@ -161,18 +156,18 @@ exports.getExamParticipants = async (req, res) => {
     }
 
     // Get participants
-    const pesertaUjians = await prisma.pesertaUjian.findMany({
+    const pesertaUjians = await prisma.peserta_ujians.findMany({
       where: participantWhere,
       include: {
-        siswa: {
+        siswas: {
           include: {
             user: true
           }
         },
-        ujian: true
+        ujians: true
       },
       orderBy: {
-        siswa: {
+        siswas: {
           nama_lengkap: 'asc'
         }
       }
@@ -181,10 +176,10 @@ exports.getExamParticipants = async (req, res) => {
     // Filter by jurusan and kelas if needed
     let filteredPeserta = pesertaUjians;
     if (jurusan && jurusan !== 'all') {
-      filteredPeserta = filteredPeserta.filter(p => p.siswa.jurusan === jurusan);
+      filteredPeserta = filteredPeserta.filter(p => p.siswas.jurusan === jurusan);
     }
     if (kelas && kelas !== 'all') {
-      filteredPeserta = filteredPeserta.filter(p => p.siswa.tingkat === kelas);
+      filteredPeserta = filteredPeserta.filter(p => p.siswas.tingkat === kelas);
     }
 
     // Format response
@@ -200,10 +195,10 @@ exports.getExamParticipants = async (req, res) => {
 
       return {
         peserta_ujian_id: peserta.peserta_ujian_id,
-        nama: peserta.siswa.nama_lengkap,
-        tingkat: peserta.siswa.tingkat,
-        jurusan: peserta.siswa.jurusan,
-        kelas: peserta.siswa.kelas,
+        nama: peserta.siswas.nama_lengkap,
+        tingkat: peserta.siswas.tingkat,
+        jurusan: peserta.siswas.jurusan,
+        kelas: peserta.siswas.kelas,
         mata_pelajaran: ujian.mata_pelajaran,
         status: statusLabel,
         status_ujian: peserta.status_ujian,
@@ -246,15 +241,15 @@ exports.getParticipantDetail = async (req, res) => {
   try {
     const { pesertaUjianId } = req.params;
 
-    const pesertaUjian = await prisma.pesertaUjian.findUnique({
+    const pesertaUjian = await prisma.peserta_ujians.findUnique({
       where: { peserta_ujian_id: parseInt(pesertaUjianId) },
       include: {
-        siswa: {
+        siswas: {
           include: {
             user: true
           }
         },
-        ujian: true
+        ujians: true
       }
     });
 
@@ -278,12 +273,12 @@ exports.getParticipantDetail = async (req, res) => {
       success: true,
       data: {
         peserta_ujian_id: pesertaUjian.peserta_ujian_id,
-        nama: pesertaUjian.siswa.nama_lengkap,
-        tingkat: pesertaUjian.siswa.tingkat,
-        kelas: `${pesertaUjian.siswa.jurusan} ${pesertaUjian.siswa.kelas}`,
-        jurusan: pesertaUjian.siswa.jurusan,
-        mata_pelajaran: pesertaUjian.ujian.mata_pelajaran,
-        nama_ujian: pesertaUjian.ujian.nama_ujian,
+        nama: pesertaUjian.siswas.nama_lengkap,
+        tingkat: pesertaUjian.siswas.tingkat,
+        kelas: `${pesertaUjian.siswas.jurusan} ${pesertaUjian.siswas.kelas}`,
+        jurusan: pesertaUjian.siswas.jurusan,
+        mata_pelajaran: pesertaUjian.ujians.mata_pelajaran,
+        nama_ujian: pesertaUjian.ujians.nama_ujian,
         status: statusLabel,
         is_blocked: pesertaUjian.is_blocked,
         block_reason: pesertaUjian.block_reason,
@@ -315,19 +310,19 @@ exports.blockParticipant = async (req, res) => {
       });
     }
 
-    const updatedPeserta = await prisma.pesertaUjian.update({
+    const updatedPeserta = await prisma.peserta_ujians.update({
       where: { peserta_ujian_id: parseInt(pesertaUjianId) },
       data: {
         is_blocked: true,
         block_reason: block_reason
       },
       include: {
-        siswa: {
+        siswas: {
           include: {
             user: true
           }
         },
-        ujian: true
+        ujians: true
       }
     });
 
@@ -336,7 +331,7 @@ exports.blockParticipant = async (req, res) => {
       message: 'Peserta berhasil diblokir',
       data: {
         peserta_ujian_id: updatedPeserta.peserta_ujian_id,
-        nama: updatedPeserta.siswa.nama_lengkap,
+        nama: updatedPeserta.siswas.nama_lengkap,
         is_blocked: updatedPeserta.is_blocked,
         block_reason: updatedPeserta.block_reason
       }
@@ -357,7 +352,7 @@ exports.generateUnlockCode = async (req, res) => {
     const { pesertaUjianId } = req.params;
 
     // Check if participant is blocked
-    const pesertaUjian = await prisma.pesertaUjian.findUnique({
+    const pesertaUjian = await prisma.peserta_ujians.findUnique({
       where: { peserta_ujian_id: parseInt(pesertaUjianId) }
     });
 
@@ -378,10 +373,10 @@ exports.generateUnlockCode = async (req, res) => {
     // Generate unique unlock code
     let unlockCode;
     let isUnique = false;
-    
+
     while (!isUnique) {
       unlockCode = generateUnlockCode();
-      const existing = await prisma.pesertaUjian.findUnique({
+      const existing = await prisma.peserta_ujians.findFirst({
         where: { unlock_code: unlockCode }
       });
       if (!existing) {
@@ -390,13 +385,13 @@ exports.generateUnlockCode = async (req, res) => {
     }
 
     // Update peserta with unlock code
-    const updatedPeserta = await prisma.pesertaUjian.update({
+    const updatedPeserta = await prisma.peserta_ujians.update({
       where: { peserta_ujian_id: parseInt(pesertaUjianId) },
       data: {
         unlock_code: unlockCode
       },
       include: {
-        siswa: {
+        siswas: {
           include: {
             user: true
           }
@@ -409,7 +404,7 @@ exports.generateUnlockCode = async (req, res) => {
       message: 'Kode unlock berhasil di-generate',
       data: {
         peserta_ujian_id: updatedPeserta.peserta_ujian_id,
-        nama: updatedPeserta.siswa.nama_lengkap,
+        nama: updatedPeserta.siswas.nama_lengkap,
         unlock_code: updatedPeserta.unlock_code
       }
     });
@@ -436,7 +431,7 @@ exports.unblockParticipant = async (req, res) => {
       });
     }
 
-    const pesertaUjian = await prisma.pesertaUjian.findUnique({
+    const pesertaUjian = await prisma.peserta_ujians.findUnique({
       where: { peserta_ujian_id: parseInt(pesertaUjianId) }
     });
 
@@ -462,7 +457,7 @@ exports.unblockParticipant = async (req, res) => {
     }
 
     // Unblock participant
-    const updatedPeserta = await prisma.pesertaUjian.update({
+    const updatedPeserta = await prisma.peserta_ujians.update({
       where: { peserta_ujian_id: parseInt(pesertaUjianId) },
       data: {
         is_blocked: false,
@@ -470,7 +465,7 @@ exports.unblockParticipant = async (req, res) => {
         unlock_code: null
       },
       include: {
-        siswa: {
+        siswas: {
           include: {
             user: true
           }
@@ -483,7 +478,7 @@ exports.unblockParticipant = async (req, res) => {
       message: 'Peserta berhasil di-unblock',
       data: {
         peserta_ujian_id: updatedPeserta.peserta_ujian_id,
-        nama: updatedPeserta.siswa.nama_lengkap,
+        nama: updatedPeserta.siswas.nama_lengkap,
         is_blocked: updatedPeserta.is_blocked
       }
     });
