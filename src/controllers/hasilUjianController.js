@@ -115,7 +115,7 @@ const getMyHasil = async (req, res) => {
   const siswa_user_id = req.user.id;
 
   try {
-    const siswa = await prisma.siswas.findUnique({ where: { userId: siswa_user_id } });
+    const siswa = await prisma.siswa.findUnique({ where: { userId: siswa_user_id } });
     if (!siswa) return res.status(404).json({ error: 'Siswa tidak ditemukan' });
 
     const hasilList = await prisma.hasil_ujians.findMany({
