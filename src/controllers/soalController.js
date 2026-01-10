@@ -61,10 +61,10 @@ const getSoals = async (req, res) => {
     if (jurusan) filters.jurusan = jurusan;
     if (tipe_soal) filters.tipe_soal = tipe_soal;
 
-    const soals = await prisma.soal.findMany({
+    const soals = await prisma.soals.findMany({
       where: filters,
       include: {
-        opsiJawabans: true,
+        opsi_jawabans: true,
       },
       orderBy: { createdAt: 'desc' },
     });
