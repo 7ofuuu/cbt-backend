@@ -1,27 +1,41 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken, checkRole } = require('../middlewares/validationMiddleware');
-const { 
-  getAllUsers, 
+const {
+  getAllUsers,
+  getAllAdmins,
+  getAllTeachers,
+  getAllStudents,
+  countUsersByRole,
+  getUserDetail,
+  updateUser,
   createUser,
   batchCreateUsers,
-  updateUserRole, 
+  batchDeleteUsers,
+  updateUserRole,
   toggleUserStatus,
   deleteUser,
-  nilaiJawaban,
-  finalisasiNilai
+  scoreAnswer,
+  finalizeScore
 } = require('../controllers/userController');
 
-// Routes untuk Admin - User Management
-router.get('/', verifyToken, checkRole('admin'), getAllUsers);           // Get all users
-router.post('/', verifyToken, checkRole('admin'), createUser);           // Create user
-router.post('/batch', verifyToken, checkRole('admin'), batchCreateUsers); // Batch create users
-router.put('/:id/role', verifyToken, checkRole('admin'), updateUserRole); // Update role
+// Routes for Admin - User Management
+router.get('/', verifyToken, checkRole('admin'), getAllUsers);              // Get all users (paginated)
+router.get('/admins', verifyToken, checkRole('admin'), getAllAdmins);       // Get all admins
+router.get('/teachers', verifyToken, checkRole('admin'), getAllTeachers);   // Get all teachers
+router.get('/students', verifyToken, checkRole('admin'), getAllStudents);   // Get all students
+router.get('/count', verifyToken, checkRole('admin'), countUsersByRole);    // Count users by role
+router.post('/', verifyToken, checkRole('admin'), createUser);              // Create user
+router.post('/batch', verifyToken, checkRole('admin'), batchCreateUsers);   // Batch create users
+router.post('/batch-delete', verifyToken, checkRole('admin'), batchDeleteUsers); // Batch delete users
+router.get('/:id', verifyToken, checkRole('admin'), getUserDetail);         // Get user detail
+router.put('/:id', verifyToken, checkRole('admin'), updateUser);            // Update user
+router.put('/:id/role', verifyToken, checkRole('admin'), updateUserRole);   // Update role
 router.patch('/:id/status', verifyToken, checkRole('admin'), toggleUserStatus); // Toggle status
-router.delete('/:id', verifyToken, checkRole('admin'), deleteUser);      // Delete user
+router.delete('/:id', verifyToken, checkRole('admin'), deleteUser);         // Delete user
 
-// Routes untuk Guru - Penilaian
-router.post('/nilai', verifyToken, checkRole('guru'), nilaiJawaban);      // Nilai essay manual
-router.post('/finalisasi', verifyToken, checkRole('guru'), finalisasiNilai); // Finalisasi nilai
+// Routes for Teacher - Grading
+router.post('/score', verifyToken, checkRole('teacher'), scoreAnswer);         // Score essay manually
+router.post('/finalize', verifyToken, checkRole('teacher'), finalizeScore);    // Finalize score
 
 module.exports = router;

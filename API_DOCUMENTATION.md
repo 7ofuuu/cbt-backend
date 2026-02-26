@@ -1,1748 +1,1414 @@
-# CBT Backend API Documentation
+# CBT Backend — API Documentation
 
-API Backend untuk Aplikasi Computer Based Test (CBT) dengan role Admin, Guru, dan Siswa.
+Complete API reference for the Computer-Based Test backend. **70 endpoints** across 8 route groups.
 
 ## Base URL
+
 ```
 http://localhost:3000/api
 ```
 
 ## Authentication
-Semua endpoint (kecuali auth) memerlukan JWT token di header:
+
+All endpoints (except auth) require a JWT token in the header:
+
 ```
 Authorization: Bearer <token>
 ```
 
+JWT payload: `{ id, role, is_super_admin }` — expires in 24 hours.
+
 ---
 
-## 📌 AUTH ENDPOINTS
+## 1. Auth (`/api/auth`)
 
-### 1. Register User
-**POST** `/auth/register`
+### POST `/api/auth/register`
 
-**Body:**
+Register a new user. **Admin-only** — requires authentication.
+
+**Middleware:** `verifyToken`, `checkRole('admin')`, `validateRegister`
+
+**Request Body:**
+
 ```json
 {
-  "username": "guru1",
+  "username": "teacher1",
   "password": "password123",
-  "role": "guru",
-  "nama": "Budi Santoso",
-  
-  // Wajib jika role = siswa:
-  "kelas": "10A",
-  "tingkat": "10",
-  "jurusan": "IPA"
+  "role": "teacher",
+  "full_name": "Budi Santoso",
+  "classroom": "XII-IPA-1",
+  "grade_level": "XII",
+  "major": "IPA"
 }
 ```
 
-**Response:**
+> `classroom`, `grade_level`, `major` are required only when `role = "student"`.
+
+**Response (201):**
+
 ```json
-{
-  "message": "User berhasil didaftarkan",
-  "userId": 1
-}
+{ "message": "User berhasil didaftarkan", "userId": 1 }
 ```
 
-### 2. Login
-**POST** `/auth/login`
+---
 
-**Body:**
+### POST `/api/auth/login`
+
+Authenticate and receive a JWT token.
+
+**Request Body:**
+
 ```json
-{
-  "username": "guru1",
-  "password": "password123"
-}
+{ "username": "teacher1", "password": "password123" }
 ```
 
-**Response:**
+**Response (200):**
+
 ```json
 {
   "message": "Login berhasil",
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token": "eyJhbG...",
   "user": {
     "id": 1,
-    "role": "guru",
+    "role": "teacher",
+    "is_super_admin": false,
     "profile": {
-      "guru_id": 1,
-      "nama_lengkap": "Budi Santoso"
+      "teacher_id": 1,
+      "full_name": "Budi Santoso"
     }
+  }
+}
+```
+
+**Error Responses:** `401` Invalid credentials (same message for both wrong username and wrong password — timing-attack mitigation) · `403` Account deactivated
+
+---
+
+### POST `/api/auth/logout`
+
+Log out the authenticated user. Stateless — clears session on client side. Logs the logout event.
+
+**Middleware:** `verifyToken`
+
+**Response (200):**
+
+```json
+{ "message": "Logout berhasil" }
+```
+
+---
+
+### GET `/api/auth/me`
+
+Get the authenticated user's profile.
+
+**Middleware:** `verifyToken`
+
+**Response (200):**
+
+```json
+{
+  "message": "Profile fetched",
+  "user": {
+    "id": 1,
+    "role": "teacher",
+    "is_super_admin": false,
+    "profile": { "teacher_id": 1, "full_name": "Budi Santoso" }
   }
 }
 ```
 
 ---
 
-## 📚 SOAL ENDPOINTS (Guru Only)
+### PATCH `/api/auth/profile`
 
-### 1. Create Soal
-**POST** `/soal`
+Update the authenticated user's profile.
 
-**Headers:** `Authorization: Bearer <token>`
+**Middleware:** `verifyToken`
 
-**Body (Pilihan Ganda):**
+**Request Body (role-dependent, all fields optional):**
+
+- **Student:** `full_name`, `nisn`
+- **Teacher:** `full_name`, `nip`
+- **Admin:** `full_name`
+
 ```json
 {
-  "tipe_soal": "PILIHAN_GANDA_SINGLE",
-  "teks_soal": "Berapa hasil dari 2 + 2?",
-  "mata_pelajaran": "Matematika",
-  "tingkat": "10",
-  "jurusan": "IPA",
-  "soal_gambar": null,
-  "soal_pembahasan": "2 + 2 = 4",
-  "opsi_jawaban": [
-    { "label": "A", "teks_opsi": "3", "is_benar": false },
-    { "label": "B", "teks_opsi": "4", "is_benar": true },
-    { "label": "C", "teks_opsi": "5", "is_benar": false },
-    { "label": "D", "teks_opsi": "6", "is_benar": false },
-    { "label": "E", "teks_opsi": "7", "is_benar": false }
+  "full_name": "Budi S.",
+  "nisn": "0012345678"
+}
+```
+
+> Students can only update `full_name` and `nisn` — fields like `classroom`, `grade_level`, `major` are admin-managed. Teachers can update `full_name` and `nip`. Admins can only update `full_name`.
+
+**Response (200):**
+
+```json
+{
+  "message": "Profile updated",
+  "user": { "id": 1, "role": "student", "profile": { "..." } }
+}
+```
+
+---
+
+## 2. Question Bank & Questions (`/api/questions`) — Teacher Only
+
+All routes require `verifyToken` + `checkRole('teacher')`.
+
+### POST `/api/questions/bank`
+
+Create a question bank. Bank name must be **globally unique**.
+
+**Request Body:**
+
+```json
+{
+  "bank_name": "Matematika Kelas XII IPA - Integral",
+  "description": "Soal-soal integral",
+  "subject": "Matematika",
+  "grade_level": "XII",
+  "major": "IPA"
+}
+```
+
+**Response (201):**
+
+```json
+{ "message": "Bank soal berhasil dibuat", "question_bank": { "question_bank_id": 1, "..." } }
+```
+
+**Error:** `409` Duplicate bank name
+
+---
+
+### GET `/api/questions/bank`
+
+List all question banks owned by the authenticated teacher.
+
+**Response (200):**
+
+```json
+{
+  "question_bank": [
+    {
+      "question_bank_id": 1,
+      "bank_name": "...",
+      "description": "...",
+      "subject": "Matematika",
+      "grade_level": "XII",
+      "major": "IPA",
+      "total_questions": 10,
+      "mc_count": 8,
+      "essay_count": 2
+    }
+  ],
+  "total_banks": 1,
+  "total_questions": 10
+}
+```
+
+---
+
+### GET `/api/questions/bank/:questionBankId`
+
+Get all questions in a specific bank.
+
+**Response (200):**
+
+```json
+{
+  "bankInfo": { "question_bank_id": 1, "bank_name": "...", "subject": "...", "grade_level": "...", "major": "..." },
+  "questions": [{ "question_id": 1, "question_type": "SINGLE_CHOICE", "question_text": "...", "answer_options": [...] }],
+  "stats": { "total_questions": 10, "total_pg_single": 5, "total_pg_multiple": 3, "total_essay": 2 }
+}
+```
+
+---
+
+### PUT `/api/questions/bank/:id`
+
+Update a question bank. Ownership verified.
+
+**Request Body:**
+
+```json
+{ "bank_name": "New Name", "description": "...", "subject": "...", "grade_level": "...", "major": "..." }
+```
+
+---
+
+### DELETE `/api/questions/bank/:id`
+
+Delete a question bank and **all its questions** (cascade). Ownership verified.
+
+---
+
+### POST `/api/questions/`
+
+Create a question. Must belong to a question bank.
+
+**Request Body:**
+
+```json
+{
+  "question_bank_id": 1,
+  "question_type": "SINGLE_CHOICE",
+  "question_text": "What is 2 + 2?",
+  "subject": "Matematika",
+  "grade_level": "XII",
+  "major": "IPA",
+  "question_image": null,
+  "question_explanation": "2 + 2 = 4",
+  "answer_options": [
+    { "label": "A", "option_text": "3", "is_correct": false },
+    { "label": "B", "option_text": "4", "is_correct": true },
+    { "label": "C", "option_text": "5", "is_correct": false },
+    { "label": "D", "option_text": "6", "is_correct": false }
   ]
 }
 ```
 
-**Body (Essay):**
+> `question_type` values: `SINGLE_CHOICE`, `MULTIPLE_CHOICE`, `ESSAY`
+
+**Response (201):**
+
 ```json
-{
-  "tipe_soal": "ESSAY",
-  "teks_soal": "Jelaskan konsep limit dalam matematika",
-  "mata_pelajaran": "Matematika",
-  "tingkat": "12",
-  "jurusan": "IPA"
-}
+{ "message": "Soal berhasil dibuat", "question_id": 1 }
 ```
-
-### 2. Get All Soal (dengan filter)
-**GET** `/soal?mata_pelajaran=Matematika&tingkat=10`
-
-### 3. Get Soal by ID
-**GET** `/soal/:id`
-
-### 4. Update Soal
-**PUT** `/soal/:id`
-
-**Body:** (sama seperti create, isi field yang ingin diupdate)
-
-### 5. Delete Soal
-**DELETE** `/soal/:id`
-
-### 6. Get Bank Soal (Grouped by Mata Pelajaran, Tingkat, Jurusan)
-**GET** `/soal/bank`
-
-**Headers:** `Authorization: Bearer <token>`
-
-**Response:**
-```json
-{
-  "bankSoal": [
-    {
-      "mata_pelajaran": "Matematika",
-      "tingkat": "X",
-      "jurusan": "IPA",
-      "jumlah_soal": 25,
-      "jumlah_pg": 20,
-      "jumlah_essay": 5
-    },
-    {
-      "mata_pelajaran": "Fisika",
-      "tingkat": "XI",
-      "jurusan": "IPA",
-      "jumlah_soal": 15,
-      "jumlah_pg": 12,
-      "jumlah_essay": 3
-    }
-  ],
-  "total_soal": 40
-}
-```
-
-**Notes:**
-- Returns soal grouped by mata_pelajaran, tingkat, and jurusan
-- Includes count of total soal, PG soal, and essay soal per group
-- Used for Bank Soal management interface
-
-### 7. Get Soal by Bank (Mata Pelajaran, Tingkat, Jurusan)
-**GET** `/soal/bank/:mataPelajaran/:tingkat/:jurusan`
-
-**Example:** `/soal/bank/Matematika/X/IPA`
-
-**Headers:** `Authorization: Bearer <token>`
-
-**Response:**
-```json
-{
-  "bankInfo": {
-    "mata_pelajaran": "Matematika",
-    "tingkat": "X",
-    "jurusan": "IPA"
-  },
-  "soals": [
-    {
-      "soal_id": 1,
-      "tipe_soal": "PILIHAN_GANDA_SINGLE",
-      "teks_soal": "Berapa hasil dari 2 + 2?",
-      "mata_pelajaran": "Matematika",
-      "tingkat": "X",
-      "jurusan": "IPA",
-      "created_at": "2025-12-20T10:00:00.000Z",
-      "opsi_jawaban": [
-        {
-          "opsi_id": 1,
-          "label": "A",
-          "teks_opsi": "3",
-          "is_benar": false
-        },
-        {
-          "opsi_id": 2,
-          "label": "B",
-          "teks_opsi": "4",
-          "is_benar": true
-        }
-      ]
-    }
-  ],
-  "stats": {
-    "total_soal": 25,
-    "total_pg_single": 15,
-    "total_pg_multiple": 5,
-    "total_essay": 5
-  }
-}
-```
-
-**Notes:**
-- Returns all soal in a specific bank
-- Includes opsi_jawaban for PG questions
-- Provides statistics about the bank
-
-### 8. Get Available Soal for Ujian
-**GET** `/soal/ujian/:ujianId/tersedia`
-
-**Headers:** `Authorization: Bearer <token>`
-
-**Response:**
-```json
-{
-  "ujian": {
-    "ujian_id": 1,
-    "nama_ujian": "Ujian Tengah Semester Matematika",
-    "mata_pelajaran": "Matematika",
-    "tingkat": "X",
-    "jurusan": "IPA"
-  },
-  "soal_tersedia": [
-    {
-      "soal_id": 1,
-      "tipe_soal": "PILIHAN_GANDA_SINGLE",
-      "teks_soal": "Berapa hasil dari 2 + 2?",
-      "is_assigned": false
-    },
-    {
-      "soal_id": 2,
-      "tipe_soal": "ESSAY",
-      "teks_soal": "Jelaskan konsep limit",
-      "is_assigned": true
-    }
-  ],
-  "total_tersedia": 25,
-  "total_assigned": 10
-}
-```
-
-**Notes:**
-- Returns soal matching ujian's mata_pelajaran, tingkat, and jurusan
-- `is_assigned` indicates if soal is already added to this ujian
-- Used for adding soal to ujian interface
 
 ---
 
-## 📝 UJIAN ENDPOINTS (Guru Only)
+### GET `/api/questions/`
 
-### 1. Create Ujian
-**POST** `/ujian`
+List questions owned by the teacher. Optional query filters: `subject`, `grade_level`, `major`, `question_type`, `page`, `limit`.
 
-**Body:**
+**Response (200):** Paginated response with `data` array and `pagination` object.
+
+---
+
+### GET `/api/questions/:id`
+
+Get a question by ID with its answer options.
+
+---
+
+### PUT `/api/questions/:id`
+
+Update a question. If `answer_options` provided, old options are **replaced entirely**.
+
+---
+
+### DELETE `/api/questions/:id`
+
+Delete a question. Ownership verified.
+
+---
+
+### GET `/api/questions/exam/:exam_id/available`
+
+Get questions available to assign to an exam (filters by exam's subject/grade/major, excludes already-assigned).
+
+---
+
+### POST `/api/questions/assign-bank`
+
+Assign all questions from a bank to an exam.
+
+**Request Body:**
+
+```json
+{ "exam_id": 1, "question_bank_id": 1 }
+```
+
+**Response (201):**
+
+```json
+{ "message": "5 soal berhasil ditambahkan ke ujian", "question_bank_id": 1, "questions_added": 5 }
+```
+
+---
+
+## 3. Exams (`/api/exams`) — Teacher Only
+
+All routes require `verifyToken` + `checkRole('teacher')`.
+
+### POST `/api/exams/`
+
+Create an exam. Students matching `grade_level` + `major` are **automatically assigned** as participants.
+
+**Request Body:**
+
 ```json
 {
-  "nama_ujian": "Ujian Tengah Semester Matematika",
-  "mata_pelajaran": "Matematika",
-  "tingkat": "10",
-  "jurusan": "IPA",
-  "tanggal_mulai": "2025-01-15T08:00:00.000Z",
-  "tanggal_selesai": "2025-01-15T12:00:00.000Z",
-  "durasi_menit": 120,
-  "is_acak_soal": true,
-  "auto_assign_siswa": true
+  "exam_name": "UTS Matematika XII IPA",
+  "subject": "Matematika",
+  "grade_level": "XII",
+  "major": "IPA",
+  "start_date": "2025-06-01T08:00:00.000Z",
+  "end_date": "2025-06-01T10:00:00.000Z",
+  "duration_minutes": 120,
+  "is_shuffle_questions": false
 }
 ```
 
-**Response:**
+> **Dual Timer System:** `end_date` is the global hard deadline — every participant must finish by this time. `duration_minutes` is the per-student timer — when a student starts, their effective deadline is `min(start_time + duration_minutes, end_date)`. Both fields are actively used for time enforcement.
+
+**Response (201):**
+
 ```json
 {
   "message": "Ujian berhasil dibuat",
-  "ujian_id": 1,
-  "auto_assign_enabled": true,
-  "jumlah_siswa_assigned": 25
-}
-```
-
-**Notes:**
-- `auto_assign_siswa` (optional, default: `true`) - Otomatis assign siswa berdasarkan tingkat & jurusan
-- Jika `true`, semua siswa dengan tingkat dan jurusan yang cocok akan langsung di-assign
-- Jika `false`, guru harus manual assign siswa menggunakan endpoint `/ujian/assign-siswa`
-
-### 2. Get All Ujian
-**GET** `/ujian`
-
-### 3. Get Ujian by ID
-**GET** `/ujian/:id`
-
-### 4. Update Ujian
-**PUT** `/ujian/:id`
-
-### 5. Delete Ujian
-**DELETE** `/ujian/:id`
-
-### 6. Assign Soal ke Ujian
-**POST** `/ujian/assign-soal`
-
-**Body:**
-```json
-{
-  "ujian_id": 1,
-  "soal_id": 5,
-  "bobot_nilai": 10,
-  "urutan": 1
-}
-```
-
-### 7. Assign Bank Soal ke Ujian (Batch)
-**POST** `/ujian/assign-bank`
-
-**Body:**
-```json
-{
-  "ujian_id": 1,
-  "mata_pelajaran": "Matematika",
-  "tingkat": "X",
-  "jurusan": "IPA",
-  "bobot_nilai_default": 10,
-  "is_acak": true
-}
-```
-
-**Response:**
-```json
-{
-  "message": "25 soal dari bank berhasil ditambahkan ke ujian",
-  "jumlah_soal": 25,
-  "is_acak": true
-}
-```
-
-**Notes:**
-- Assigns all soal from specified bank (mata_pelajaran, tingkat, jurusan) to ujian
-- `bobot_nilai_default` applies to all soal (default: 10)
-- `is_acak`: if true, randomizes the order of soal
-- Automatically sets urutan based on existing soal in ujian
-- Skips duplicates if soal already assigned
-
-### 8. Remove Soal dari Ujian
-**DELETE** `/ujian/remove-soal/:soal_ujian_id`
-
-**Notes:**
-- Only removes the relationship (soalUjian), NOT the soal from master data
-- Soal remains in bank and can be re-assigned
-
-### 9. Remove Multiple Soal dari Ujian (Batch)
-**DELETE** `/ujian/remove-multiple-soal`
-
-**Body:**
-```json
-{
-  "ujian_id": 1,
-  "soal_ujian_ids": [1, 2, 3, 4, 5]
-}
-```
-
-**Response:**
-```json
-{
-  "message": "5 soal berhasil dihapus dari ujian",
-  "jumlah_dihapus": 5
-}
-```
-
-**Notes:**
-- Batch delete multiple soal from ujian
-- Validates all soal_ujian_ids belong to the specified ujian
-- Only removes relationships, not master data
-
-### 10. Remove Bank dari Ujian
-**DELETE** `/ujian/remove-bank`
-
-**Body:**
-```json
-{
-  "ujian_id": 1,
-  "mata_pelajaran": "Matematika",
-  "tingkat": "X",
-  "jurusan": "IPA"
-}
-```
-
-**Response:**
-```json
-{
-  "message": "15 soal dari bank Matematika-X-IPA berhasil dihapus dari ujian",
-  "jumlah_dihapus": 15
-}
-```
-
-**Notes:**
-- Removes all soal from specified bank (mata_pelajaran + tingkat + jurusan)
-- **jurusan is REQUIRED**
-- Useful for removing entire bank assignment at once
-
-### 11. Clear All Soal dari Ujian
-**DELETE** `/ujian/:ujianId/clear-soal`
-
-**Response:**
-```json
-{
-  "message": "Semua soal berhasil dihapus dari ujian",
-  "jumlah_dihapus": 25
-}
-```
-
-**Notes:**
-- Removes ALL soal from ujian (reset)
-- Useful for starting fresh when reconfiguring ujian
-
-### 12. Get Soal Ujian Grouped by Bank
-**GET** `/ujian/:ujianId/soal-by-bank`
-
-**Response:**
-```json
-{
-  "ujian_id": 1,
-  "total_bank": 2,
-  "total_soal": 25,
-  "banks": [
-    {
-      "bank": "Matematika-X-IPA",
-      "mata_pelajaran": "Matematika",
-      "tingkat": "X",
-      "jurusan": "IPA",
-      "jumlah_soal": 15,
-      "total_bobot": 150,
-      "soals": [
-        {
-          "soal_ujian_id": 1,
-          "soal_id": 5,
-          "urutan": 1,
-          "bobot_nilai": 10,
-          "tipe_soal": "PILIHAN_GANDA_SINGLE",
-          "teks_soal": "Berapa hasil dari 2 + 2?",
-          "opsi_jawaban": [
-            {
-              "opsi_id": 1,
-              "label": "A",
-              "teks_opsi": "3",
-              "is_benar": false
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-**Notes:**
-- Returns soal grouped by their bank origin
-- Includes complete soal details with opsi_jawaban
-- Summary includes jumlah_soal and total_bobot per bank
-- Useful for ujian management interface
-
-### 13. Update Bobot Multiple Soal
-**PUT** `/ujian/update-bobot-multiple`
-
-**Body:**
-```json
-{
-  "ujian_id": 1,
-  "updates": [
-    { "soal_ujian_id": 1, "bobot_nilai": 15 },
-    { "soal_ujian_id": 2, "bobot_nilai": 20 },
-    { "soal_ujian_id": 3, "bobot_nilai": 10 }
-  ]
-}
-```
-
-**Response:**
-```json
-{
-  "message": "Bobot 3 soal berhasil diupdate",
-  "jumlah_updated": 3
-}
-```
-
-**Notes:**
-- Batch update bobot_nilai for multiple soal
-- **NO ownership validation** - any guru can update (for correction purposes)
-- Validates all soal_ujian_ids belong to specified ujian_id
-- More efficient than updating one by one
-
-### 14. Assign Siswa ke Ujian
-**POST** `/ujian/assign-siswa`
-
-**Body:**
-```json
-{
-  "ujian_id": 1,
-  "tingkat": "10",
-  "jurusan": "IPA"
+  "exam": { "exam_id": 1, "exam_name": "UTS Matematika XII IPA", "..." : "..." },
+  "auto_assigned_students": 30
 }
 ```
 
 ---
 
-## 🎓 SISWA ENDPOINTS (Siswa Only)
+### GET `/api/exams/`
 
-### 1. Get My Ujians
-**GET** `/siswa/ujians`
+List all exams owned by the teacher with pagination. Returns question/participant **counts** (not full records).
 
-**Response:**
+**Query Parameters:** `page` (default 1), `limit` (default 20)
+
+**Response (200):**
+
 ```json
 {
-  "ujians": [
+  "data": [ { "exam_id": 1, "exam_name": "...", "_count": { "exam_questions": 10, "exam_participants": 30 }, "..." : "..." } ],
+  "pagination": { "total": 5, "page": 1, "limit": 20, "totalPages": 1 }
+}
+```
+
+---
+
+### GET `/api/exams/:id`
+
+Get exam details including questions (with answer options) and participants (with results).
+
+---
+
+### PUT `/api/exams/:id`
+
+Update an exam.
+
+**Request Body:** Same fields as create (all optional).
+
+---
+
+### DELETE `/api/exams/:id`
+
+Delete an exam and all related data.
+
+---
+
+### POST `/api/exams/assign-question`
+
+Assign a single question to an exam. Sequence is auto-calculated.
+
+**Request Body:**
+
+```json
+{ "exam_id": 1, "question_id": 5, "score_weight": 10 }
+```
+
+---
+
+### POST `/api/exams/assign-bank`
+
+Assign all questions from a bank to an exam (batch). Score weight is fixed at 10.
+
+**Request Body:**
+
+```json
+{ "exam_id": 1, "question_bank_id": 1, "max_questions": 20, "shuffle": true }
+```
+
+> `max_questions` (optional): limit number of questions assigned from the bank. `shuffle` (optional): randomize question order before assigning.
+
+---
+
+### POST `/api/exams/assign-student`
+
+Assign students matching criteria to an exam.
+
+**Request Body:**
+
+```json
+{ "exam_id": 1, "grade_level": "XII", "major": "IPA" }
+```
+
+---
+
+### DELETE `/api/exams/:examId/questions/:questionId`
+
+Remove a single question from an exam.
+
+---
+
+### POST `/api/exams/remove-multiple-questions`
+
+Remove multiple questions from an exam.
+
+**Request Body:**
+
+```json
+{ "exam_id": 1, "exam_question_ids": [1, 2, 3] }
+```
+
+---
+
+### POST `/api/exams/remove-bank`
+
+Remove all questions from a specific bank from an exam.
+
+**Request Body:**
+
+```json
+{ "exam_id": 1, "question_bank_id": 1 }
+```
+
+---
+
+### DELETE `/api/exams/:id/clear-questions`
+
+Remove ALL questions from an exam.
+
+---
+
+### POST `/api/exams/reassign-students`
+
+Clear NOT_STARTED participants and re-assign students matching new grade/major criteria. Preserves participants with status IN_PROGRESS, COMPLETED, or GRADED.
+
+**Request Body:**
+
+```json
+{ "exam_id": 1, "grade_level": "XII", "major": "IPA" }
+```
+
+> `major` is optional. Only participants with status `NOT_STARTED` are removed — active/completed participants are preserved.
+
+**Response (200):**
+
+```json
+{
+  "message": "Peserta berhasil di-reassign. 25 dihapus, 30 ditambahkan.",
+  "removed": 25,
+  "assigned": 30
+}
+```
+
+---
+
+### GET `/api/exams/:id/questions-by-bank`
+
+Get exam questions grouped by their question bank.
+
+---
+
+### PUT `/api/exams/update-weight-multiple`
+
+Update score weights for multiple questions.
+
+**Request Body:**
+
+```json
+{
+  "exam_id": 1,
+  "updates": [
+    { "exam_question_id": 1, "score_weight": 15 },
+    { "exam_question_id": 2, "score_weight": 20 }
+  ]
+}
+```
+
+---
+
+## 4. Student Exam (`/api/students`) — Student Only
+
+All routes require `verifyToken` + `checkRole('student')`.
+
+### GET `/api/students/exams`
+
+Get exams assigned to the authenticated student (only `SCHEDULED` and `ONGOING` exams).
+
+**Response (200):**
+
+```json
+{
+  "exams": [
     {
-      "peserta_ujian_id": 1,
-      "status_ujian": "BELUM_MULAI",
-      "ujian": {
-        "nama_ujian": "Ujian MTK",
-        "tanggal_mulai": "2025-01-15T08:00:00.000Z"
+      "exam_participant_id": 1,
+      "exam_id": 1,
+      "exam_name": "UTS Matematika",
+      "subject": "Matematika",
+      "grade_level": "XII",
+      "major": "IPA",
+      "start_date": "2025-06-01T08:00:00.000Z",
+      "end_date": "2025-06-01T10:00:00.000Z",
+      "duration_minutes": 120,
+      "total_questions": 10,
+      "exam_status": "NOT_STARTED",
+      "is_blocked": false,
+      "is_shuffle": false,
+      "teacher_name": "Budi Santoso",
+      "time_status": "Sedang Berlangsung"
+    }
+  ]
+}
+```
+
+> `time_status` values: `"Belum Mulai"`, `"Sedang Berlangsung"`, `"Sudah Berakhir"`.
+
+---
+
+### POST `/api/students/exams/start`
+
+Start an exam. Sets status to `IN_PROGRESS` and returns the question list.
+
+**Request Body:**
+
+```json
+{ "exam_id": 1, "unlock_code": "A1B2C3" }
+```
+
+> `unlock_code` is only required if the student is blocked.
+
+**Response (200):**
+
+```json
+{
+  "exam_participant_id": 1,
+  "exam": {
+    "exam_id": 1,
+    "exam_name": "UTS Matematika",
+    "subject": "Matematika",
+    "duration_minutes": 120,
+    "end_date": "2025-06-01T10:00:00.000Z"
+  },
+  "remaining_seconds": 7140,
+  "total_questions": 10,
+  "questions": [
+    {
+      "exam_question_id": 1,
+      "sequence": 1,
+      "score_weight": 10,
+      "question": {
+        "question_id": 1,
+        "question_type": "SINGLE_CHOICE",
+        "question_text": "What is 2 + 2?",
+        "question_image": null,
+        "answer_options": [
+          { "option_id": 1, "label": "A", "option_text": "3" },
+          { "option_id": 2, "label": "B", "option_text": "4" }
+        ]
       }
     }
+  ],
+  "existing_answers": [
+    { "question_id": 1, "mc_option_ids": "2", "essay_answer_text": null }
   ]
 }
 ```
 
-### 2. Start Ujian
-**POST** `/siswa/ujians/start`
+> **Note:** `is_correct` is hidden from answer options. `existing_answers` contains previously saved answers (useful when resuming). `remaining_seconds` is the countdown to `min(start_time + duration_minutes, end_date)`.
 
-**Body:**
-```json
-{
-  "peserta_ujian_id": 1
-}
-```
-
-### 3. Submit Jawaban
-**POST** `/siswa/ujians/jawaban`
-
-**Body (Pilihan Ganda Single):**
-```json
-{
-  "peserta_ujian_id": 1,
-  "soal_id": 5,
-  "jawaban_pg_opsi_ids": "[\"2\"]"
-}
-```
-
-**Body (Pilihan Ganda Multiple):**
-```json
-{
-  "peserta_ujian_id": 1,
-  "soal_id": 6,
-  "jawaban_pg_opsi_ids": "[\"2\", \"4\"]"
-}
-```
-
-**Body (Essay):**
-```json
-{
-  "peserta_ujian_id": 1,
-  "soal_id": 7,
-  "jawaban_essay_text": "Limit adalah nilai yang didekati oleh suatu fungsi..."
-}
-```
-
-### 4. Finish Ujian
-**POST** `/siswa/ujians/finish`
-
-**Body:**
-```json
-{
-  "peserta_ujian_id": 1
-}
-```
-
-### 5. Get Hasil Ujian
-**GET** `/siswa/ujians/hasil/:peserta_ujian_id`
+**Error Responses:** `403` Blocked (needs unlock code) · `400` Already finished / Not started yet / Past end_date
 
 ---
 
-## � ADMIN - AKTIVITAS (MONITORING) ENDPOINTS
+### POST `/api/students/exams/answer`
 
-### Admin Only - Monitor Ujian & Peserta
+Submit or update an answer for a single question (auto-save).
 
-#### 1. Get All Activities (Exam List)
-**GET** `/admin/activities`
+**Request Body (Single Choice):**
 
-**Query Parameters:**
-- `jurusan` - Filter by jurusan (IPA/IPS/Bahasa) or 'all'
-- `kelas` - Filter by tingkat (X/XI/XII) or 'all'
-- `status` - Filter participant status (ON_PROGRESS/SUBMITTED/BLOCKED) or 'all'
-- `jenis_ujian` - Filter by exam type ('Ujian Akhir Semester'/'Ujian Tengah Semester') or 'all'
+```json
+{ "exam_participant_id": 1, "question_id": 5, "mc_option_ids": 12 }
+```
 
-**Response:**
+**Request Body (Multiple Choice):**
+
+```json
+{ "exam_participant_id": 1, "question_id": 6, "mc_option_ids": [10, 12, 14] }
+```
+
+**Request Body (Essay):**
+
+```json
+{ "exam_participant_id": 1, "question_id": 7, "essay_answer_text": "The answer is..." }
+```
+
+> Sending null/empty `mc_option_ids` AND empty `essay_answer_text` deletes an existing answer (unselect behavior). The `is_correct` field is automatically computed and persisted for MC questions.
+
+---
+
+### POST `/api/students/exams/finish`
+
+Finish an exam. Auto-grades MC questions, creates exam result.
+
+**Request Body:**
+
+```json
+{ "exam_participant_id": 1 }
+```
+
+**Response (200):**
+
+```json
+{
+  "message": "Ujian berhasil diselesaikan",
+  "result": {
+    "exam_participant_id": 1,
+    "final_score": 85.71,
+    "total_score": 60,
+    "total_weight": 70,
+    "has_essay": false,
+    "status": "GRADED"
+  }
+}
+```
+
+> If the exam contains ungraded essay questions, `status` = `"COMPLETED"` until the teacher finalizes. If all questions are MC or all essays are graded, `status` = `"GRADED"`.
+
+---
+
+### POST `/api/students/exams/report-violation`
+
+Student self-reports an app lifecycle violation (e.g., leaving the app during exam). Automatically blocks the participant.
+
+**Request Body:**
+
+```json
+{
+  "exam_participant_id": 1,
+  "violation_type": "APP_BACKGROUNDED",
+  "details": "Student left the app for 5 seconds"
+}
+```
+
+> `violation_type` max 100 chars. `details` max 500 chars (optional). Logs `EXAM_VIOLATION` activity.
+
+**Response (200):**
+
+```json
+{ "message": "Pelanggaran dilaporkan", "is_blocked": true }
+```
+
+---
+
+## 5. User Management (`/api/users`) — Admin & Teacher
+
+### GET `/api/users/` — Admin
+
+List all users with pagination and search.
+
+**Query Parameters:** `search` (searches username + full_name), `limit` (default 10), `page` (default 1)
+
+**Response (200):**
+
+```json
+{
+  "data": [
+    {
+      "id": 1, "username": "student1", "role": "student",
+      "is_active": true, "is_super_admin": false,
+      "created_at": "...", "updated_at": "...",
+      "profile": {
+        "student_id": 1, "full_name": "Ahmad",
+        "classroom": "XII-IPA-1", "grade_level": "XII", "major": "IPA"
+      }
+    }
+  ],
+  "pagination": {
+    "total": 50, "page": 1,
+    "limit": 10, "totalPages": 5
+  }
+}
+```
+
+---
+
+### GET `/api/users/admins` — Admin
+
+List all admin users with pagination. Query: `limit`, `page`, `search`.
+
+---
+
+### GET `/api/users/teachers` — Admin
+
+List all teacher users with pagination. Query: `limit`, `page`, `search`.
+
+---
+
+### GET `/api/users/students` — Admin
+
+List all student users with pagination and search. Query: `limit`, `page`, `search`.
+
+---
+
+### GET `/api/users/count` — Admin
+
+Count users by role.
+
+**Response (200):**
+
+```json
+{ "admin": 2, "teacher": 8, "student": 90, "total": 100 }
+```
+
+---
+
+### POST `/api/users/` — Admin
+
+Create a new user.
+
+**Request Body:**
+
+```json
+{
+  "username": "student99",
+  "password": "password123",
+  "role": "student",
+  "full_name": "Ahmad Rizki",
+  "classroom": "XII-IPA-1",
+  "grade_level": "XII",
+  "major": "IPA"
+}
+```
+
+> For students: `classroom`, `grade_level`, `major` are **required**. Valid `grade_level`: X, XI, XII. Valid `major`: IPA, IPS, Bahasa. Classroom format: `grade_level-major-number` (e.g., XII-IPA-1).
+
+---
+
+### POST `/api/users/batch` — Admin
+
+Batch import users.
+
+**Request Body:**
+
+```json
+{
+  "users": [
+    { "username": "s1", "password": "pass", "role": "student", "full_name": "A", "classroom": "XII-IPA-1", "grade_level": "XII", "major": "IPA" },
+    { "username": "s2", "password": "pass", "role": "student", "full_name": "B", "classroom": "XII-IPA-1", "grade_level": "XII", "major": "IPA" }
+  ]
+}
+```
+
+**Response (200):**
+
+```json
+{
+  "message": "2 user berhasil dibuat, 1 gagal",
+  "success": [{ "username": "s1", "id": 10 }, { "username": "s2", "id": 11 }],
+  "failed": ["s3"],
+  "errors": [{ "username": "s3", "error": "Username sudah digunakan" }]
+}
+```
+
+---
+
+### POST `/api/users/batch-delete` — Admin
+
+Batch delete users. Two modes: by explicit user IDs, or by grade/major/classroom filter (for graduating classes). Self and Super Admin are always excluded.
+
+**Request Body (Mode 1 — by IDs):**
+
+```json
+{ "user_ids": [10, 11, 12] }
+```
+
+**Request Body (Mode 2 — by filter):**
+
+```json
+{ "grade_level": "XII", "major": "IPA", "classroom": "XII-IPA-1" }
+```
+
+> `major` and `classroom` are optional filters when using `grade_level`.
+
+**Response (200):**
+
+```json
+{
+  "message": "5 user berhasil dihapus",
+  "deleted_count": 5,
+  "skipped_count": 1,
+  "skipped_users": ["admin1"]
+}
+```
+
+---
+
+### GET `/api/users/:id` — Admin
+
+Get detailed user info.
+
+---
+
+### PUT `/api/users/:id` — Admin
+
+Update a user. Super Admin can only be edited by themselves. Fields are **flat** (no nested `profile` object).
+
+**Request Body:**
+
+```json
+{
+  "username": "newname",
+  "password": "newpass",
+  "full_name": "New Name",
+  "classroom": "XII-IPA-2",
+  "grade_level": "XII",
+  "major": "IPA",
+  "nisn": "0012345678",
+  "nip": "198501012010011001"
+}
+```
+
+> All fields are optional. `classroom`, `grade_level`, `major`, `nisn` apply to students. `nip` applies to teachers. `username` and `password` apply to all roles.
+
+---
+
+### PUT `/api/users/:id/role` — Admin
+
+Change a user's role. Creates new role-specific profile and deletes old one. Super Admin role cannot be changed.
+
+**Request Body:**
+
+```json
+{ "new_role": "teacher" }
+```
+
+---
+
+### PATCH `/api/users/:id/status` — Admin
+
+Toggle user active/inactive. Super Admin status cannot be toggled.
+
+---
+
+### DELETE `/api/users/:id` — Admin
+
+Delete a user. Super Admin cannot be deleted.
+
+---
+
+### POST `/api/users/score` — Teacher
+
+Grade an essay answer manually.
+
+**Request Body:**
+
+```json
+{ "answer_id": 15, "manual_score": 85 }
+```
+
+> Score must be 0–100. Teacher ownership of the exam is verified.
+
+---
+
+### POST `/api/users/finalize` — Teacher
+
+Finalize scoring for a participant. Recalculates total: MC uses `is_correct`, essay uses `manual_score`. Sets status to `GRADED`.
+
+**Request Body:**
+
+```json
+{ "exam_participant_id": 1 }
+```
+
+**Response (200):**
+
+```json
+{
+  "message": "Nilai berhasil difinalisasi",
+  "result": {
+    "exam_participant_id": 1,
+    "final_score": 85.71,
+    "total_score": 60,
+    "total_weight": 70,
+    "has_essay": true,
+    "status": "GRADED"
+  }
+}
+```
+
+---
+
+## 6. Activity Monitoring (`/api/admin/activities`) — Admin Only
+
+All routes require `verifyToken` + `checkRole('admin')`.
+
+### GET `/api/admin/activities/`
+
+List all exams with participant status overview.
+
+**Query Parameters:** `major` ("all" or specific), `classroom` ("all" or grade_level), `jenis_ujian` ("all", contains "akhir" or "tengah")
+
+**Response (200):**
+
 ```json
 {
   "success": true,
   "data": [
     {
-      "ujian_id": 1,
-      "nama_ujian": "Ujian Akhir Semester Matematika",
-      "mata_pelajaran": "Matematika",
-      "jurusan": "IPA",
-      "tingkat": "XII",
-      "jenis_ujian": "Ujian Akhir Semester",
-      "peserta_count": 25,
-      "status": "Sedang Berlangsung",
-      "tanggal_mulai": "2025-12-24T08:00:00.000Z",
-      "tanggal_selesai": "2025-12-24T10:00:00.000Z",
-      "durasi_menit": 120
+      "exam_id": 1, "exam_name": "UTS Matematika", "subject": "Matematika",
+      "major": "IPA", "grade_level": "XII",
+      "exam_type": "Ujian Tengah Semester",
+      "participant_count": 30,
+      "status": "Sedang ONGOING",
+      "start_date": "...", "end_date": "...", "duration_minutes": 120
     }
   ]
 }
 ```
 
-**Status Values:**
-- `Belum Mulai` - Exam hasn't started yet
-- `Sedang Berlangsung` - Exam is currently active
-- `Selesai` - Exam has ended
+---
 
-#### 2. Get Exam Participants Detail
-**GET** `/admin/activities/:ujianId/participants`
+### GET `/api/admin/activities/:examId/participants`
 
-**Query Parameters:**
-- `jurusan` - Filter participants by jurusan
-- `kelas` - Filter participants by kelas
-- `status` - Filter by participant status (ON_PROGRESS/SUBMITTED/BLOCKED)
+Get participants for a specific exam.
 
-**Response:**
+**Query Parameters:** `major`, `classroom`, `status` ("BLOCKED", "ON_PROGRESS", "SUBMITTED", or "all")
+
+---
+
+### GET `/api/admin/activities/participant/:examParticipantId`
+
+Get detailed info about a single participant.
+
+---
+
+### POST `/api/admin/activities/:examParticipantId/block`
+
+Block a participant (e.g., suspected cheating).
+
+**Request Body:**
+
 ```json
-{
-  "success": true,
-  "data": {
-    "ujian": {
-      "ujian_id": 1,
-      "nama_ujian": "Ujian Akhir Semester Matematika",
-      "mata_pelajaran": "Matematika",
-      "tingkat": "XII",
-      "jurusan": "IPA"
-    },
-    "peserta": [
-      {
-        "peserta_ujian_id": 15,
-        "nama": "Budi Santoso",
-        "tingkat": "XII",
-        "kelas": "IPA 01",
-        "mata_pelajaran": "Matematika",
-        "status": "On Progress",
-        "is_blocked": false,
-        "block_reason": null,
-        "unlock_code": null,
-        "waktu_mulai": "2025-12-24T08:05:00.000Z",
-        "waktu_selesai": null
-      }
-    ]
-  }
-}
-```
-
-**Status Values:**
-- `Belum Mulai` - Student hasn't started
-- `On Progress` - Currently working on exam
-- `Submitted` - Exam completed
-- `Blocked` - Student is blocked
-
-#### 3. Get Participant Detail
-**GET** `/admin/activities/participant/:pesertaUjianId`
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "peserta_ujian_id": 15,
-    "nama": "Budi Santoso",
-    "tingkat": "XII",
-    "kelas": "IPA 01",
-    "mata_pelajaran": "Matematika",
-    "status": "Blocked",
-    "is_blocked": true,
-    "block_reason": "Keluar dari aplikasi sebelum ujian selesai",
-    "unlock_code": "ABC123",
-    "waktu_mulai": "2025-12-24T08:05:00.000Z",
-    "waktu_selesai": null
-  }
-}
-```
-
-#### 4. Block Participant
-**POST** `/admin/activities/:pesertaUjianId/block`
-
-**Body:**
-```json
-{
-  "block_reason": "Keluar dari aplikasi sebelum ujian selesai"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Peserta berhasil diblokir"
-}
-```
-
-#### 5. Generate Unlock Code
-**POST** `/admin/activities/:pesertaUjianId/generate-unlock`
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Kode unlock berhasil di-generate",
-  "data": {
-    "unlock_code": "X7K9P2"
-  }
-}
-```
-
-#### 6. Unblock Participant
-**POST** `/admin/activities/:pesertaUjianId/unblock`
-
-**Body:**
-```json
-{
-  "unlock_code": "X7K9P2"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Peserta berhasil di-unblock"
-}
+{ "block_reason": "Terdeteksi meninggalkan aplikasi" }
 ```
 
 ---
 
-## �👥 USER MANAGEMENT ENDPOINTS
+### POST `/api/admin/activities/:examParticipantId/generate-unlock`
 
-### Admin Only
+Generate a **6-character** unlock code for a blocked participant.
 
-#### 1. Get All Users
-**GET** `/users?role=siswa&status_aktif=true`
+**Response (200):**
 
-#### 2. Create User
-**POST** `/users`
-
-**Body:** (sama seperti register)
-
-#### 3. Update User Role
-**PUT** `/users/:id/role`
-
-**Body:**
 ```json
-{
-  "role": "guru"
-}
-```
-
-#### 4. Toggle User Status
-**PATCH** `/users/:id/status`
-
-#### 5. Delete User
-**DELETE** `/users/:id`
-
----
-
-### Guru Only - Penilaian
-
-#### 1. Nilai Jawaban Essay Manual
-**POST** `/users/nilai`
-
-**Body:**
-```json
-{
-  "jawaban_id": 15,
-  "nilai_manual": 85
-}
-```
-
-#### 2. Finalisasi Nilai (Hitung Total)
-**POST** `/users/finalisasi`
-
-**Body:**
-```json
-{
-  "peserta_ujian_id": 1
-}
-```
-
-**Response:**
-```json
-{
-  "message": "Nilai berhasil difinalisasi",
-  "nilai_akhir": "87.50"
-}
+{ "success": true, "data": { "exam_participant_id": 1, "full_name": "Ahmad", "unlock_code": "A1B2C3" } }
 ```
 
 ---
 
-## �‍🎓 SISWA ENDPOINTS (Siswa Only)
+### POST `/api/admin/activities/:examParticipantId/unblock`
 
-### 1. Get My Ujians (List ujian yang di-assign ke siswa)
-**GET** `/siswa/ujians`
+Unblock a participant using the unlock code.
 
-**Headers:** `Authorization: Bearer <token>` (role: siswa)
+**Request Body:**
 
-**Response:**
+```json
+{ "unlock_code": "A1B2C3" }
+```
+
+---
+
+## 7. Exam Results (`/api/exam-results`) — Student & Teacher
+
+### GET `/api/exam-results/my-results` — Student
+
+Get the authenticated student's exam results.
+
+**Response (200):**
+
 ```json
 {
-  "ujians": [
+  "results": [
     {
-      "peserta_ujian_id": 5,
-      "status_ujian": "BELUM_MULAI",
-      "is_blocked": false,
-      "unlock_code": null,
-      "waktu_mulai": null,
-      "waktu_selesai": null,
-      "ujian": {
-        "ujian_id": 2,
-        "nama_ujian": "Ujian Matematika Semester 1",
-        "mata_pelajaran": "Matematika",
-        "tingkat": "10",
-        "jurusan": "IPA",
-        "tanggal_mulai": "2025-12-26T08:00:00.000Z",
-        "tanggal_selesai": "2025-12-26T10:00:00.000Z",
-        "durasi_menit": 90,
-        "status_ujian": "TERJADWAL",
-        "is_acak_soal": false
-      },
-      "hasil": null
-    },
-    {
-      "peserta_ujian_id": 8,
-      "status_ujian": "SEDANG_DIKERJAKAN",
-      "is_blocked": false,
-      "unlock_code": null,
-      "waktu_mulai": "2025-12-20T08:15:00.000Z",
-      "waktu_selesai": null,
-      "ujian": {
-        "ujian_id": 1,
-        "nama_ujian": "Ujian Fisika",
-        "mata_pelajaran": "Fisika",
-        "tingkat": "10",
-        "jurusan": "IPA",
-        "tanggal_mulai": "2025-12-20T08:00:00.000Z",
-        "tanggal_selesai": "2025-12-20T10:00:00.000Z",
-        "durasi_menit": 90,
-        "status_ujian": "BERLANGSUNG",
-        "is_acak_soal": true
-      },
-      "hasil": null
-    }
-  ]
-}
-```
-
-**Notes:**
-- Siswa hanya dapat melihat ujian dengan status `TERJADWAL` atau `BERLANGSUNG`
-- Ujian dengan status `BERAKHIR` tidak akan ditampilkan
-- Filter ini memastikan siswa hanya fokus pada ujian yang sedang aktif
-
-**Status Ujian (Peserta):**
-- `BELUM_MULAI` - Ujian belum dikerjakan
-- `SEDANG_DIKERJAKAN` - Sedang mengerjakan
-- `SELESAI` - Sudah submit, menunggu grading essay
-- `DINILAI` - Nilai sudah final
-
-**Status Ujian (Master):**
-- `TERJADWAL` - Ujian yang sudah dijadwalkan
-- `BERLANGSUNG` - Ujian sedang berlangsung
-- `BERAKHIR` - Ujian sudah berakhir (tidak ditampilkan ke siswa)
-
----
-
-### 2. Start Ujian (Mulai mengerjakan ujian)
-**POST** `/siswa/ujians/start`
-
-**Headers:** `Authorization: Bearer <token>` (role: siswa)
-
-**Body:**
-```json
-{
-  "peserta_ujian_id": 5,
-  "unlock_code": "ABC123"  // Optional, hanya jika ujian terblokir
-}
-```
-
-**Response:**
-```json
-{
-  "message": "Ujian berhasil dimulai",
-  "peserta_ujian": {
-    "peserta_ujian_id": 5,
-    "status_ujian": "SEDANG_DIKERJAKAN",
-    "waktu_mulai": "2025-12-26T10:15:00.000Z",
-    "durasi_menit": 90,
-    "ujian": {
-      "ujian_id": 2,
-      "nama_ujian": "Ujian Matematika Semester 1",
-      "mata_pelajaran": "Matematika",
-      "is_acak_soal": false
-    },
-    "soal_list": [
-      {
-        "soal_ujian_id": 15,
-        "urutan": 1,
-        "bobot_nilai": 10,
-        "soal": {
-          "soal_id": 7,
-          "tipe_soal": "PILIHAN_GANDA",
-          "teks_soal": "Berapa hasil dari 2 + 2?",
-          "soal_gambar": null,
-          "opsi_jawaban": [
-            {
-              "opsi_id": 1,
-              "label_opsi": "A",
-              "teks_opsi": "3"
-            },
-            {
-              "opsi_id": 2,
-              "label_opsi": "B",
-              "teks_opsi": "4"
-            },
-            {
-              "opsi_id": 3,
-              "label_opsi": "C",
-              "teks_opsi": "5"
-            }
-          ]
-        },
-        "jawaban_saya": null
-      },
-      {
-        "soal_ujian_id": 16,
-        "urutan": 2,
-        "bobot_nilai": 15,
-        "soal": {
-          "soal_id": 8,
-          "tipe_soal": "ESSAY",
-          "teks_soal": "Jelaskan konsep limit dalam matematika",
-          "soal_gambar": null,
-          "opsi_jawaban": []
-        },
-        "jawaban_saya": null
-      }
-    ],
-    "total_soal": 10
-  }
-}
-```
-
-**Error Responses:**
-- `403` - Ujian terblokir, perlu unlock_code
-- `400` - Ujian sudah selesai / waktu belum dimulai / waktu sudah lewat
-
-**Notes:**
-- Jawaban benar (`is_benar`) TIDAK ditampilkan untuk opsi jawaban
-- Jika ujian pernah dimulai, `jawaban_saya` akan berisi jawaban yang sudah tersimpan (resume capability)
-- Frontend harus menyimpan `waktu_mulai` untuk countdown timer
-
----
-
-### 3. Submit Jawaban (Auto-save per soal)
-**POST** `/siswa/ujians/jawaban`
-
-**Headers:** `Authorization: Bearer <token>` (role: siswa)
-
-**Body (Pilihan Ganda):**
-```json
-{
-  "peserta_ujian_id": 5,
-  "soal_id": 7,
-  "opsi_jawaban_id": 2
-}
-```
-
-**Body (Essay):**
-```json
-{
-  "peserta_ujian_id": 5,
-  "soal_id": 8,
-  "teks_jawaban": "Limit adalah konsep matematika yang menjelaskan..."
-}
-```
-
-**Response:**
-```json
-{
-  "message": "Jawaban berhasil disimpan",
-  "jawaban": {
-    "jawaban_id": 25,
-    "soal_id": 7,
-    "opsi_jawaban_id": 2,
-    "teks_jawaban": null
-  }
-}
-```
-
-**Notes:**
-- Endpoint ini dapat dipanggil **berkali-kali** untuk soal yang sama (update jawaban)
-- Auto-grading dilakukan untuk PILIHAN_GANDA (tapi `is_correct` TIDAK dikirim ke frontend)
-- Jawaban tersimpan real-time (auto-save)
-- Frontend sebaiknya call endpoint ini setiap kali siswa mengubah jawaban (debounced)
-
----
-
-### 4. Finish Ujian (Finalisasi & submit)
-**POST** `/siswa/ujians/finish`
-
-**Headers:** `Authorization: Bearer <token>` (role: siswa)
-
-**Body:**
-```json
-{
-  "peserta_ujian_id": 5
-}
-```
-
-**Response:**
-```json
-{
-  "message": "Ujian berhasil diselesaikan",
-  "hasil": {
-    "hasil_ujian_id": 12,
-    "nilai_akhir": 82.5,
-    "status": "Selesai dinilai",
-    "total_soal": 10,
-    "soal_terjawab": 10
-  }
-}
-```
-
-**Response (jika ada essay):**
-```json
-{
-  "message": "Ujian berhasil diselesaikan",
-  "hasil": {
-    "hasil_ujian_id": 12,
-    "nilai_akhir": 70.0,
-    "status": "Menunggu penilaian essay oleh guru",
-    "total_soal": 10,
-    "soal_terjawab": 9
-  }
-}
-```
-
-**Notes:**
-- Status `PesertaUjian` berubah menjadi `SELESAI`
-- Auto-calculate nilai untuk PILIHAN_GANDA
-- Jika ada ESSAY, status = "Menunggu penilaian", nilai bersifat temporary
-- Jika tidak ada ESSAY, status langsung `DINILAI` dan nilai final
-
----
-
-## 📊 HASIL UJIAN ENDPOINTS
-
-### 1. Get My Hasil (Siswa - lihat hasil ujian sendiri)
-**GET** `/hasil-ujian/my-hasil`
-
-**Headers:** `Authorization: Bearer <token>` (role: siswa)
-
-**Response:**
-```json
-{
-  "hasil": [
-    {
-      "hasil_ujian_id": 12,
-      "peserta_ujian_id": 5,
-      "nilai_akhir": 85.5,
-      "tanggal_submit": "2025-12-26T11:30:00.000Z",
-      "pesertaUjian": {
-        "peserta_ujian_id": 5,
-        "siswa_id": 3,
-        "ujian_id": 2,
-        "status_ujian": "DINILAI",
-        "ujian": {
-          "ujian_id": 2,
-          "nama_ujian": "Ujian Matematika Semester 1",
-          "mata_pelajaran": "Matematika",
-          "tingkat": "10",
-          "jurusan": "IPA",
-          "tanggal_mulai": "2025-12-26T08:00:00.000Z",
-          "tanggal_selesai": "2025-12-26T10:00:00.000Z"
-        }
+      "exam_result_id": 1,
+      "final_score": 85.71,
+      "submit_date": "2026-02-26T12:00:00.000Z",
+      "exam_participant": {
+        "exam": { "exam_id": 1, "exam_name": "UTS Matematika", "subject": "Matematika", "grade_level": "XII", "major": "IPA" }
       }
     }
   ]
 }
 ```
 
-### 2. Get Hasil by Ujian (Guru - lihat semua hasil ujian)
-**GET** `/hasil-ujian/ujian/:ujian_id`
+---
 
-**Headers:** `Authorization: Bearer <token>` (role: guru)
+### GET `/api/exam-results/completed-exams` — Teacher
 
-**Example:** `/hasil-ujian/ujian/1`
+Get all completed exams (status `ENDED`) with score statistics. **All teachers see all ended exams** (no ownership filter).
 
-**Response:**
+**Query Parameters:** `page` (default: 1), `limit` (default: 10)
+
+**Response (200):**
+
 ```json
 {
-  "ujian": {
-    "ujian_id": 1,
-    "nama_ujian": "UTS Matematika Semester 1",
-    "mata_pelajaran": "Matematika"
-  },
-  "total_peserta": 30,
-  "hasil": [
+  "data": [
     {
-      "hasil_ujian_id": 12,
-      "peserta_ujian_id": 5,
-      "nilai_akhir": 92.5,
-      "tanggal_submit": "2025-12-26T10:30:00.000Z",
-      "pesertaUjian": {
-        "peserta_ujian_id": 5,
-        "siswa_id": 3,
-        "status_ujian": "DINILAI",
-        "siswa": {
-          "siswa_id": 3,
-          "nama_lengkap": "Ahmad Fauzi",
-          "kelas": "X-1",
-          "tingkat": "X",
-          "jurusan": "IPA"
-        }
-      }
-    },
-    {
-      "hasil_ujian_id": 13,
-      "peserta_ujian_id": 6,
-      "nilai_akhir": 87.0,
-      "tanggal_submit": "2025-12-26T10:35:00.000Z",
-      "pesertaUjian": {
-        "siswa": {
-          "nama_lengkap": "Siti Nurhaliza",
-          "kelas": "X-1"
-        }
-      }
-    }
-  ]
-}
-```
-
-**Notes:**
-- Returns all hasil ujian sorted by nilai_akhir (highest first)
-- Only shows results for ujian owned by the logged-in guru
-- Includes student information for each result
-
-### 3. Get Hasil by Peserta (Guru - detail hasil satu siswa)
-**GET** `/hasil-ujian/peserta/:peserta_ujian_id`
-
-**Headers:** `Authorization: Bearer <token>` (role: guru)
-
-**Example:** `/hasil-ujian/peserta/5`
-
-**Response:**
-```json
-{
-  "hasil": {
-    "hasil_ujian_id": 12,
-    "peserta_ujian_id": 5,
-    "nilai_akhir": 85.5,
-    "tanggal_submit": "2025-12-26T10:30:00.000Z",
-    "pesertaUjian": {
-      "peserta_ujian_id": 5,
-      "siswa_id": 3,
-      "ujian_id": 1,
-      "status_ujian": "DINILAI",
-      "siswa": {
-        "siswa_id": 3,
-        "nama_lengkap": "Ahmad Fauzi",
-        "kelas": "X-1",
-        "tingkat": "X",
-        "jurusan": "IPA"
+      "exam_id": 1,
+      "exam_name": "UTS Matematika",
+      "subject": "Matematika",
+      "grade_level": "XII",
+      "major": "IPA",
+      "start_date": "...",
+      "end_date": "...",
+      "duration_minutes": 90,
+      "exam_status": "ENDED",
+      "teacher": { "teacher_id": 1, "full_name": "Budi Santoso" },
+      "statistics": {
+        "total_participants": 30,
+        "total_completed": 28,
+        "total_questions": 20,
+        "highest_score": 100,
+        "lowest_score": 45.5,
+        "average_score": 72.35
       },
-      "ujian": {
-        "ujian_id": 1,
-        "nama_ujian": "UTS Matematika",
-        "mata_pelajaran": "Matematika",
-        "tanggal_mulai": "2025-12-26T08:00:00.000Z",
-        "tanggal_selesai": "2025-12-26T10:00:00.000Z"
-      },
-      "jawabans": [
+      "participant_results": [
         {
-          "jawaban_id": 15,
-          "soal_id": 1,
-          "is_correct": true,
-          "nilai_manual": null,
-          "soal": {
-            "soal_id": 1,
-            "teks_soal": "Berapa hasil 2 + 2?",
-            "tipe_soal": "PILIHAN_GANDA_SINGLE"
-          }
+          "exam_participant_id": 1,
+          "student": { "student_id": 1, "full_name": "Ahmad", "classroom": "XII-IPA-1" },
+          "exam_status": "GRADED",
+          "start_time": "...",
+          "end_time": "...",
+          "final_score": 85.71,
+          "submit_date": "..."
         }
       ]
     }
+  ],
+  "pagination": { "page": 1, "limit": 10, "total": 9, "totalPages": 1 }
+}
+```
+
+---
+
+### GET `/api/exam-results/exam/:exam_id` — Teacher
+
+Get results for all participants in an exam, ordered by score descending. **All teachers can view any exam** (no ownership check).
+
+**Query Parameters:** `page` (default: 1), `limit` (default: 20)
+
+**Response (200):**
+
+```json
+{
+  "data": [
+    {
+      "exam_result_id": 1,
+      "final_score": 85.71,
+      "submit_date": "...",
+      "exam_participant": {
+        "student": { "student_id": 1, "full_name": "Ahmad", "classroom": "XII-IPA-1" }
+      }
+    }
+  ],
+  "pagination": { "page": 1, "limit": 20, "total": 28, "totalPages": 2 }
+}
+```
+
+---
+
+### GET `/api/exam-results/participant/:exam_participant_id` — Teacher
+
+Get result for a single participant. **All teachers can view** (no ownership check).
+
+**Response (200):**
+
+```json
+{
+  "result": {
+    "exam_result_id": 1,
+    "final_score": 85.71,
+    "submit_date": "...",
+    "exam_participant": {
+      "student": { "student_id": 1, "full_name": "Ahmad", "classroom": "XII-IPA-1" },
+      "exam": { "exam_id": 1, "exam_name": "UTS Matematika", "subject": "Matematika" },
+      "answers": [ { "answer_id": 1, "question": { "..." }, "is_correct": true, "manual_score": null } ]
+    }
   }
 }
 ```
 
-**Notes:**
-- Returns basic hasil info with student answers
-- Use this for quick overview of student's result
+---
 
-### 4. Get Detailed Result (Guru - review lengkap semua jawaban)
-**GET** `/hasil-ujian/detail/:peserta_ujian_id`
+### GET `/api/exam-results/detail/:exam_participant_id` — Teacher
 
-**Headers:** `Authorization: Bearer <token>` (role: guru)
+Get detailed review: each question mapped to its answer, with `is_correct` and `score_obtained`. Returns `exam_status` from participant record. If no `ExamResult` exists yet (ungraded), falls back to `ExamParticipant` data and returns `exam_result: null`.
 
-**Example:** `/hasil-ujian/detail/5`
+**Response (200) — with result:**
 
-**Response:**
 ```json
 {
-  "hasil_ujian": {
-    "hasil_ujian_id": 12,
-    "nilai_akhir": 82.5,
-    "tanggal_submit": "2025-12-26T10:30:00.000Z"
+  "exam_result": {
+    "exam_result_id": 1,
+    "final_score": 85.71,
+    "submit_date": "2026-02-26T12:00:00.000Z"
   },
-  "siswa": {
-    "siswa_id": 3,
-    "nama_lengkap": "Ahmad Fauzi",
-    "kelas": "X-1",
-    "tingkat": "X",
-    "jurusan": "IPA"
-  },
-  "ujian": {
-    "ujian_id": 1,
-    "nama_ujian": "UTS Matematika Semester 1",
-    "mata_pelajaran": "Matematika"
-  },
+  "exam_status": "GRADED",
+  "student": { "student_id": 1, "full_name": "Ahmad", "classroom": "XII-IPA-1" },
+  "exam": { "exam_id": 1, "exam_name": "UTS Matematika", "subject": "Matematika" },
   "review": [
     {
-      "urutan": 1,
-      "soal": {
-        "soal_id": 7,
-        "tipe_soal": "PILIHAN_GANDA_SINGLE",
-        "teks_soal": "Berapa hasil dari 2 + 2?",
-        "opsiJawabans": [
-          {
-            "opsi_id": 1,
-            "label": "A",
-            "teks_opsi": "3",
-            "is_benar": false
-          },
-          {
-            "opsi_id": 2,
-            "label": "B",
-            "teks_opsi": "4",
-            "is_benar": true
-          }
-        ]
-      },
-      "bobot_nilai": 10,
-      "jawaban": {
-        "jawaban_id": 15,
-        "opsi_jawaban_id": 2,
-        "teks_jawaban": null,
-        "is_correct": true,
-        "nilai_manual": null
-      },
+      "sequence": 1,
+      "question": { "question_id": 1, "question_type": "SINGLE_CHOICE", "question_text": "...", "answer_options": ["..."] },
+      "score_weight": 10,
+      "answer": { "answer_id": 1, "is_correct": true, "manual_score": null },
       "is_correct": true,
-      "nilai_didapat": 10
-    },
-    {
-      "urutan": 2,
-      "soal": {
-        "soal_id": 8,
-        "tipe_soal": "ESSAY",
-        "teks_soal": "Jelaskan konsep limit dalam matematika"
-      },
-      "bobot_nilai": 20,
-      "jawaban": {
-        "jawaban_id": 16,
-        "teks_jawaban": "Limit adalah nilai yang didekati...",
-        "is_correct": null,
-        "nilai_manual": 75.5
-      },
-      "is_correct": null,
-      "nilai_didapat": 75.5
+      "score_obtained": 10
     }
   ]
 }
 ```
 
-**Notes:**
-- Most detailed view for grading and review
-- Shows all soal with their jawaban in order
-- Includes bobot_nilai and nilai_didapat for each soal
-- Used for grading essay questions and reviewing student work
+**Response (200) — without result (ungraded):**
 
-### 5. Update Nilai Manual (Guru - nilai soal essay)
-**PUT** `/hasil-ujian/nilai-manual`
-
-**Headers:** `Authorization: Bearer <token>` (role: guru)
-
-**Body:**
 ```json
 {
-  "jawaban_id": 16,
-  "nilai_manual": 85.0
+  "exam_result": null,
+  "exam_status": "COMPLETED",
+  "student": { "..." },
+  "exam": { "..." },
+  "review": [ { "sequence": 1, "question": { "..." }, "score_weight": 10, "answer": null, "is_correct": null, "score_obtained": 0 } ]
 }
 ```
 
-**Response:**
+---
+
+### POST `/api/exam-results/calculate` — Teacher
+
+Calculate and save exam result. Auto-grades using `is_correct` for MC and `manual_score` for essay. Updates participant status to `GRADED` (all graded) or `COMPLETED` (has ungraded essay).
+
+**Request Body:**
+
 ```json
-{
-  "message": "Nilai manual berhasil diupdate",
-  "jawaban": {
-    "jawaban_id": 16,
-    "soal_id": 8,
-    "peserta_ujian_id": 5,
-    "teks_jawaban": "Limit adalah nilai yang didekati...",
-    "nilai_manual": 85.0,
-    "is_correct": null
-  }
-}
+{ "exam_participant_id": 1 }
 ```
 
-**Notes:**
-- Used for grading ESSAY questions manually
-- `nilai_manual` range: 0-100 (percentage)
-- Automatically recalculates the final score (nilai_akhir) after update
-- Final score formula: `(totalNilai / totalBobot) × 100`
-- For PG: `nilai_didapat = bobot_nilai` (if correct)
-- For Essay: `nilai_didapat = (nilai_manual / 100) × bobot_nilai`
+**Response (200):**
 
-**Example Calculation:**
-```
-Soal 1 (PG, bobot 10): Benar → nilai = 10
-Soal 2 (Essay, bobot 20): Manual 85% → nilai = 17
-Soal 3 (PG, bobot 10): Salah → nilai = 0
-
-Total Bobot = 40
-Total Nilai = 27
-Nilai Akhir = (27/40) × 100 = 67.5
-```
-
-### 6. Calculate Hasil Ujian (Guru - recalculate nilai)
-**POST** `/hasil-ujian/calculate`
-
-**Headers:** `Authorization: Bearer <token>` (role: guru)
-
-**Body:**
-```json
-{
-  "peserta_ujian_id": 5
-}
-```
-
-**Response:**
 ```json
 {
   "message": "Hasil ujian berhasil dihitung",
-  "hasil": {
-    "hasil_ujian_id": 12,
-    "nilai_akhir": 82.5,
-    "total_nilai": 33.0,
-    "total_bobot": 40
+  "result": {
+    "final_score": 85.71,
+    "total_score": 60,
+    "total_weight": 70,
+    "status": "GRADED"
   }
 }
 ```
 
-**Notes:**
-- Manually trigger recalculation of final score
-- Automatically called after updating nilai_manual
-- Useful if you need to recalculate after fixing data
-- Updates status_ujian to 'DINILAI' after calculation
+---
 
-### 7. Get Completed Ujians (Guru - lihat semua ujian yang sudah selesai)
-**GET** `/hasil-ujian/completed-ujian`
+### PUT `/api/exam-results/manual-score` — Teacher
 
-**Headers:** `Authorization: Bearer <token>` (role: guru)
+Update manual score for an essay answer. **Automatically recalculates** `final_score` and updates participant status after saving.
 
-**Response:**
+**Request Body:**
+
+```json
+{ "answer_id": 15, "manual_score": 80 }
+```
+
+**Response (200):**
+
 ```json
 {
-  "total_ujian_selesai": 2,
-  "ujians": [
+  "message": "Nilai manual berhasil diupdate",
+  "answer": { "answer_id": 15, "manual_score": 80, "..." },
+  "recalculated": {
+    "final_score": 85.71,
+    "status": "GRADED"
+  }
+}
+```
+
+> `recalculated.status` will be `"GRADED"` when all essay answers have been scored, or `"COMPLETED"` when some essays remain unscored.
+
+---
+
+## 8. Activity Logs (`/api/activity-logs`) — Admin & Teacher
+
+All routes require `verifyToken` + `checkRole(['admin', 'teacher'])`.
+
+### GET `/api/activity-logs/`
+
+Get activity logs with optional filters.
+
+**Query Parameters:** `user_id`, `activity_type`, `start_date`, `end_date`, `limit`
+
+---
+
+### GET `/api/activity-logs/active-users`
+
+Get users who logged in within a time window.
+
+**Query Parameters:** `hours` (default: 24)
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "hours_window": 24,
+  "total_active": 15,
+  "users": [
     {
-      "ujian_id": 1,
-      "nama_ujian": "UAS Matematika Semester 1",
-      "mata_pelajaran": "Matematika",
-      "tingkat": "X",
-      "jurusan": "IPA",
-      "tanggal_mulai": "2025-12-20T08:00:00.000Z",
-      "tanggal_selesai": "2025-12-20T10:00:00.000Z",
-      "durasi_menit": 90,
-      "status_ujian": "BERAKHIR",
-      "statistics": {
-        "total_peserta": 30,
-        "total_selesai": 28,
-        "total_soal": 40,
-        "nilai_tertinggi": 95,
-        "nilai_terendah": 65,
-        "nilai_rata_rata": "82.50"
-      },
-      "peserta_results": [
-        {
-          "peserta_ujian_id": 1,
-          "siswa": {
-            "siswa_id": 1,
-            "nama_lengkap": "Ahmad Fauzi",
-            "kelas": "X-1"
-          },
-          "status_ujian": "DINILAI",
-          "waktu_mulai": "2025-12-20T08:05:00.000Z",
-          "waktu_selesai": "2025-12-20T09:30:00.000Z",
-          "nilai_akhir": 85,
-          "tanggal_submit": "2025-12-20T09:30:00.000Z"
-        },
-        {
-          "peserta_ujian_id": 2,
-          "siswa": {
-            "siswa_id": 2,
-            "nama_lengkap": "Siti Nurhaliza",
-            "kelas": "X-1"
-          },
-          "status_ujian": "SELESAI",
-          "waktu_mulai": "2025-12-20T08:10:00.000Z",
-          "waktu_selesai": "2025-12-20T09:45:00.000Z",
-          "nilai_akhir": 78,
-          "tanggal_submit": "2025-12-20T09:45:00.000Z"
-        }
-      ]
+      "user_id": 1, "username": "student1", "full_name": "Ahmad",
+      "role": "student", "is_active": true,
+      "last_login": "...", "ip_address": "...", "user_agent": "..."
     }
   ]
 }
 ```
 
-**Notes:**
-- Returns only ujians with status `BERAKHIR` that belong to the logged-in guru
-- Includes comprehensive statistics for each ujian
-- Shows detailed results for peserta with status `SELESAI` or `DINILAI`
-- Statistics include:
-  - `total_peserta`: Total assigned participants
-  - `total_selesai`: Number of participants who finished
-  - `total_soal`: Total questions in the exam
-  - `nilai_tertinggi`: Highest score
-  - `nilai_terendah`: Lowest score
-  - `nilai_rata_rata`: Average score
-- Useful for guru to review completed exams and student performance
-- Ordered by `tanggal_selesai` descending (most recent first)
+---
+
+### GET `/api/activity-logs/user/:userId`
+
+Get logs for a specific user. Query: `limit` (default: 50).
 
 ---
 
-## �🔑 Role-Based Access
+### GET `/api/activity-logs/exam-participant/:examParticipantId`
 
-| Endpoint | Admin | Guru | Siswa |
-|----------|-------|------|-------|
-| `/auth/*` | ✅ | ✅ | ✅ |
-| `/soal/*` | ❌ | ✅ | ❌ |
-| `/ujian/*` | ❌ | ✅ | ❌ |
-| `/siswa/ujians/*` | ❌ | ❌ | ✅ |
-| `/hasil-ujian/my-hasil` | ❌ | ❌ | ✅ |
-| `/hasil-ujian/*` (other) | ❌ | ✅ | ❌ |
-| `/admin/activities/*` | ✅ | ❌ | ❌ |
-| `/users` (User Mgmt) | ✅ | ❌ | ❌ |
-| `/users/nilai` | ❌ | ✅ | ❌ |
+Get logs for a specific exam participant. Query: `limit` (default: 50).
 
 ---
 
-## 📊 Database Schema
+### GET `/api/activity-logs/type/:activityType`
 
-Lihat file `prisma/schema.prisma` untuk struktur database lengkap.
+Get logs by activity type. Query: `limit` (default: 100).
 
-**Main Entities:**
-- User (Admin, Guru, Siswa)
-- Soal & OpsiJawaban
-- Ujian
-- SoalUjian (Many-to-Many)
-- PesertaUjian (Many-to-Many)
-- Jawaban
-- HasilUjian
+**Activity Types:** `LOGIN`, `START_EXAM`, `FINISH_EXAM`, `AUTO_FINISH_UJIAN`, `UJIAN_AUTO_EXPIRED`, `UJIAN_MANUAL_EXPIRED`, `EXAM_VIOLATION`, `BLOCK_STUDENT`, `UPDATE_MANUAL_SCORE`, `CALCULATE_RESULT`
 
 ---
 
-## 🚀 Setup & Testing
+## Global Deadline System
 
-### 1. Install Dependencies
-```bash
-npm install
-```
+Exam timing uses a **dual timer system**:
 
-### 2. Setup Database
-```bash
-# Jalankan MySQL server
-# Edit .env sesuai kredensial database Anda
+1. **Global deadline** (`end_date`): Hard cutoff for ALL participants
+2. **Per-student timer** (`duration_minutes`): Individual countdown from when each student starts
 
-# Generate Prisma Client & Run Migration
-npx prisma migrate dev --name init
-```
+Each student's effective deadline = `min(start_time + duration_minutes, end_date)`.
 
-### 3. Run Server
-```bash
-npm start
-# atau
-node index.js
-```
+### Auto-Finish Scheduler
 
-### 4. Test dengan Postman
-1. Import collection dari dokumentasi ini
-2. Login sebagai admin/guru/siswa
-3. Copy token dari response
-4. Set Bearer Token di Postman
-5. Test endpoint sesuai role
+Runs every 60 seconds:
+
+1. Queries all `ExamParticipant` with status `IN_PROGRESS`
+2. Checks if `now > exam.end_date`
+3. If expired: auto-grades MC answers, creates `ExamResult`, sets status to `COMPLETED`/`GRADED`, logs `AUTO_FINISH_UJIAN`
+
+### Auto-Expire Scheduler
+
+Runs every 60 seconds:
+
+1. Queries all `Exam` with status `SCHEDULED` or `ONGOING` where `end_date < now`
+2. Updates exam status to `ENDED`
+3. Logs `UJIAN_AUTO_EXPIRED`
 
 ---
 
-## 📝 Example Workflow
+## Error Responses
 
-### Guru membuat ujian:
-1. Login → Get token
-2. POST `/soal` → Buat 10 soal
-3. POST `/ujian` → Buat ujian baru
-4. POST `/ujian/assign-soal` → Assign 10 soal ke ujian
-5. POST `/ujian/assign-siswa` → Assign siswa kelas 10 IPA
-
-### Siswa mengerjakan ujian (Incremental Auto-Save):
-1. **Login** → `POST /auth/login` → Get token
-2. **Lihat ujian** → `GET /siswa/ujians` → Lihat ujian yang di-assign
-3. **Mulai ujian** → `POST /siswa/ujians/start` → Mulai & get soal list
-4. **Kerjakan soal** (auto-save per soal):
-   - Soal 1 → `POST /siswa/ujians/jawaban` (soal_id: 1, opsi_jawaban_id: 2)
-   - Soal 2 → `POST /siswa/ujians/jawaban` (soal_id: 2, teks_jawaban: "...")
-   - Soal 3 → `POST /siswa/ujians/jawaban` (soal_id: 3, opsi_jawaban_id: 1)
-   - ... (repeat untuk semua soal)
-5. **Finalisasi** → `POST /siswa/ujians/finish` → Submit & calculate nilai
-6. **Lihat hasil** → `GET /hasil-ujian/my-hasil` → Lihat nilai final
-
----
-
-## ⚠️ Error Responses
+All errors follow:
 
 ```json
-{
-  "error": "Token tidak valid atau expired"
-}
+{ "error": "Error message here" }
 ```
 
-**Status Codes:**
-- `200` - Success
-- `201` - Created
-- `400` - Bad Request
-- `401` - Unauthorized (no token)
-- `403` - Forbidden (wrong role)
-- `404` - Not Found
-- `500` - Server Error
+| Status | Description |
+|--------|-------------|
+| 400 | Bad request / Validation error |
+| 401 | Invalid or missing token |
+| 403 | Forbidden (wrong role, blocked, ownership) |
+| 404 | Resource not found |
+| 409 | Conflict (duplicate) |
+| 500 | Server error |
 
 ---
 
-**Happy Testing! 🎉**
----
+## Endpoint Summary (70 total)
 
-## 📊 ACTIVITY LOG ENDPOINTS (Admin & Guru Only)
-
-### 1. Get All Activity Logs
-**GET** `/activity-logs`
-
-**Headers:** `Authorization: Bearer <token>`
-
-**Query Parameters:**
-- `activity_type` (optional): Filter by activity type (LOGIN, START_UJIAN, FINISH_UJIAN, AUTO_FINISH_UJIAN, BLOCKED, UNBLOCKED)
-- `user_id` (optional): Filter by user ID
-- `peserta_ujian_id` (optional): Filter by peserta ujian ID
-- `search` (optional): Search in description field
-- `limit` (optional): Limit number of results (default: 100)
-
-**Example:** `/activity-logs?activity_type=START_UJIAN&limit=50`
-
-**Response:**
-```json
-{
-  "logs": [
-    {
-      "log_id": 1,
-      "user_id": 5,
-      "peserta_ujian_id": 10,
-      "activity_type": "START_UJIAN",
-      "description": "Siswa memulai ujian Matematika UTS",
-      "ip_address": "192.168.1.100",
-      "user_agent": "Mozilla/5.0...",
-      "metadata": {
-        "ujian_id": 3,
-        "total_soal": 20,
-        "waktu_mulai": "2025-12-27T10:00:00.000Z"
-      },
-      "created_at": "2025-12-27T10:00:00.000Z"
-    }
-  ],
-  "total": 1
-}
-```
-
-### 2. Get Activity Logs by User
-**GET** `/activity-logs/user/:userId`
-
-**Headers:** `Authorization: Bearer <token>`
-
-**Query Parameters:**
-- `limit` (optional): Limit number of results (default: 50)
-
-**Example:** `/activity-logs/user/5?limit=20`
-
-**Response:**
-```json
-{
-  "user_id": 5,
-  "logs": [
-    {
-      "log_id": 1,
-      "user_id": 5,
-      "peserta_ujian_id": 10,
-      "activity_type": "LOGIN",
-      "description": "User berhasil login",
-      "ip_address": "192.168.1.100",
-      "user_agent": "Mozilla/5.0...",
-      "metadata": {
-        "username": "siswa1",
-        "role": "siswa"
-      },
-      "created_at": "2025-12-27T09:55:00.000Z"
-    },
-    {
-      "log_id": 2,
-      "user_id": 5,
-      "peserta_ujian_id": 10,
-      "activity_type": "START_UJIAN",
-      "description": "Siswa memulai ujian Matematika UTS",
-      "ip_address": "192.168.1.100",
-      "created_at": "2025-12-27T10:00:00.000Z"
-    }
-  ],
-  "total": 2
-}
-```
-
-### 3. Get Activity Logs by Peserta Ujian
-**GET** `/activity-logs/peserta-ujian/:pesertaUjianId`
-
-**Headers:** `Authorization: Bearer <token>`
-
-**Query Parameters:**
-- `limit` (optional): Limit number of results (default: 50)
-
-**Example:** `/activity-logs/peserta-ujian/10`
-
-**Response:**
-```json
-{
-  "peserta_ujian_id": 10,
-  "logs": [
-    {
-      "log_id": 2,
-      "user_id": 5,
-      "peserta_ujian_id": 10,
-      "activity_type": "START_UJIAN",
-      "description": "Siswa memulai ujian Matematika UTS",
-      "ip_address": "192.168.1.100",
-      "metadata": {
-        "ujian_id": 3,
-        "total_soal": 20,
-        "waktu_mulai": "2025-12-27T10:00:00.000Z"
-      },
-      "created_at": "2025-12-27T10:00:00.000Z"
-    },
-    {
-      "log_id": 3,
-      "user_id": 5,
-      "peserta_ujian_id": 10,
-      "activity_type": "FINISH_UJIAN",
-      "description": "Siswa menyelesaikan ujian Matematika UTS",
-      "ip_address": "192.168.1.100",
-      "metadata": {
-        "ujian_id": 3,
-        "nilai_akhir": 85,
-        "total_soal": 20,
-        "soal_terjawab": 18,
-        "has_essay": false,
-        "waktu_selesai": "2025-12-27T11:30:00.000Z"
-      },
-      "created_at": "2025-12-27T11:30:00.000Z"
-    }
-  ],
-  "total": 2
-}
-```
-
-### 4. Get Activity Logs by Type
-**GET** `/activity-logs/type/:activityType`
-
-**Headers:** `Authorization: Bearer <token>`
-
-**Query Parameters:**
-- `limit` (optional): Limit number of results (default: 100)
-
-**Example:** `/activity-logs/type/AUTO_FINISH_UJIAN`
-
-**Response:**
-```json
-{
-  "activity_type": "AUTO_FINISH_UJIAN",
-  "logs": [
-    {
-      "log_id": 15,
-      "user_id": 8,
-      "peserta_ujian_id": 25,
-      "activity_type": "AUTO_FINISH_UJIAN",
-      "description": "Ujian diselesaikan otomatis karena waktu habis",
-      "ip_address": null,
-      "metadata": {
-        "ujian_id": 5,
-        "nilai_akhir": 75,
-        "total_soal": 25,
-        "soal_terjawab": 20,
-        "has_essay": true
-      },
-      "created_at": "2025-12-27T12:00:00.000Z"
-    }
-  ],
-  "total": 1
-}
-```
-
-**Activity Types:**
-- `LOGIN` - User berhasil login
-- `START_UJIAN` - Siswa memulai ujian
-- `FINISH_UJIAN` - Siswa menyelesaikan ujian secara manual
-- `AUTO_FINISH_UJIAN` - Ujian diselesaikan otomatis (waktu habis)
-- `BLOCKED` - Siswa terblokir (keluar dari aplikasi saat ujian)
-- `UNBLOCKED` - Siswa di-unblock oleh admin/guru
-
-**Notes:**
-- All activity log endpoints require authentication with admin or guru role
-- Activity logs are created automatically by the system
-- `metadata` field contains JSON with context-specific information
-- `ip_address` and `user_agent` are automatically captured from request headers
-- Logs are useful for audit trail, monitoring, and troubleshooting
-
----
-
-**Happy Testing! 🎉**
+| # | Method | Route | Auth |
+|---|--------|-------|------|
+| 1 | POST | `/api/auth/register` | admin |
+| 2 | POST | `/api/auth/login` | — |
+| 3 | POST | `/api/auth/logout` | token |
+| 4 | GET | `/api/auth/me` | token |
+| 5 | PATCH | `/api/auth/profile` | token |
+| 6 | POST | `/api/questions/bank` | teacher |
+| 7 | GET | `/api/questions/bank` | teacher |
+| 8 | GET | `/api/questions/bank/:questionBankId` | teacher |
+| 9 | PUT | `/api/questions/bank/:id` | teacher |
+| 10 | DELETE | `/api/questions/bank/:id` | teacher |
+| 11 | POST | `/api/questions/` | teacher |
+| 12 | GET | `/api/questions/` | teacher |
+| 13 | GET | `/api/questions/:id` | teacher |
+| 14 | PUT | `/api/questions/:id` | teacher |
+| 15 | DELETE | `/api/questions/:id` | teacher |
+| 16 | GET | `/api/questions/exam/:exam_id/available` | teacher |
+| 17 | POST | `/api/questions/assign-bank` | teacher |
+| 18 | POST | `/api/exams/` | teacher |
+| 19 | GET | `/api/exams/` | teacher |
+| 20 | GET | `/api/exams/:id` | teacher |
+| 21 | PUT | `/api/exams/:id` | teacher |
+| 22 | DELETE | `/api/exams/:id` | teacher |
+| 23 | POST | `/api/exams/assign-question` | teacher |
+| 24 | POST | `/api/exams/assign-bank` | teacher |
+| 25 | POST | `/api/exams/assign-student` | teacher |
+| 26 | DELETE | `/api/exams/:examId/questions/:questionId` | teacher |
+| 27 | POST | `/api/exams/remove-multiple-questions` | teacher |
+| 28 | POST | `/api/exams/remove-bank` | teacher |
+| 29 | DELETE | `/api/exams/:id/clear-questions` | teacher |
+| 30 | GET | `/api/exams/:id/questions-by-bank` | teacher |
+| 31 | PUT | `/api/exams/update-weight-multiple` | teacher |
+| 32 | POST | `/api/exams/reassign-students` | teacher |
+| 33 | GET | `/api/students/exams` | student |
+| 34 | POST | `/api/students/exams/start` | student |
+| 35 | POST | `/api/students/exams/answer` | student |
+| 36 | POST | `/api/students/exams/finish` | student |
+| 37 | POST | `/api/students/exams/report-violation` | student |
+| 38 | GET | `/api/users/` | admin |
+| 39 | GET | `/api/users/admins` | admin |
+| 40 | GET | `/api/users/teachers` | admin |
+| 41 | GET | `/api/users/students` | admin |
+| 42 | GET | `/api/users/count` | admin |
+| 43 | POST | `/api/users/` | admin |
+| 44 | POST | `/api/users/batch` | admin |
+| 45 | POST | `/api/users/batch-delete` | admin |
+| 46 | GET | `/api/users/:id` | admin |
+| 47 | PUT | `/api/users/:id` | admin |
+| 48 | PUT | `/api/users/:id/role` | admin |
+| 49 | PATCH | `/api/users/:id/status` | admin |
+| 50 | DELETE | `/api/users/:id` | admin |
+| 51 | POST | `/api/users/score` | teacher |
+| 52 | POST | `/api/users/finalize` | teacher |
+| 53 | GET | `/api/admin/activities/` | admin |
+| 54 | GET | `/api/admin/activities/:examId/participants` | admin |
+| 55 | GET | `/api/admin/activities/participant/:examParticipantId` | admin |
+| 56 | POST | `/api/admin/activities/:examParticipantId/block` | admin |
+| 57 | POST | `/api/admin/activities/:examParticipantId/generate-unlock` | admin |
+| 58 | POST | `/api/admin/activities/:examParticipantId/unblock` | admin |
+| 59 | GET | `/api/exam-results/my-results` | student |
+| 60 | GET | `/api/exam-results/completed-exams` | teacher |
+| 61 | GET | `/api/exam-results/exam/:exam_id` | teacher |
+| 62 | GET | `/api/exam-results/participant/:exam_participant_id` | teacher |
+| 63 | GET | `/api/exam-results/detail/:exam_participant_id` | teacher |
+| 64 | POST | `/api/exam-results/calculate` | teacher |
+| 65 | PUT | `/api/exam-results/manual-score` | teacher |
+| 66 | GET | `/api/activity-logs/` | admin/teacher |
+| 67 | GET | `/api/activity-logs/active-users` | admin/teacher |
+| 68 | GET | `/api/activity-logs/user/:userId` | admin/teacher |
+| 69 | GET | `/api/activity-logs/exam-participant/:examParticipantId` | admin/teacher |
+| 70 | GET | `/api/activity-logs/type/:activityType` | admin/teacher |

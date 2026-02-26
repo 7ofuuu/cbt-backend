@@ -5,7 +5,7 @@ const prisma = require('../config/db');
  * Create activity log entry
  * @param {Object} data - Log data
  * @param {number} data.user_id - User ID
- * @param {number} data.peserta_ujian_id - Peserta Ujian ID (optional)
+ * @param {number} data.exam_participant_id - Peserta Ujian ID (optional)
  * @param {string} data.activity_type - Activity type (LOGIN, START_UJIAN, etc.)
  * @param {string} data.description - Activity description
  * @param {string} data.ip_address - IP address (optional)
@@ -17,7 +17,7 @@ const createLog = async (data) => {
     const log = await prisma.$executeRaw`
       INSERT INTO activity_logs (
         user_id, 
-        peserta_ujian_id, 
+        exam_participant_id, 
         activity_type, 
         description, 
         ip_address, 
@@ -26,7 +26,7 @@ const createLog = async (data) => {
         created_at
       ) VALUES (
         ${data.user_id || null},
-        ${data.peserta_ujian_id || null},
+        ${data.exam_participant_id || null},
         ${data.activity_type},
         ${data.description},
         ${data.ip_address || null},
@@ -36,10 +36,9 @@ const createLog = async (data) => {
       )
     `;
     
-    console.log(`📝 Activity logged: ${data.activity_type} - ${data.description}`);
     return log;
   } catch (error) {
-    console.error('❌ Error creating activity log:', error);
+    console.error('[ActivityLog] Failed to create log:', error.message);
     // Don't throw error to prevent breaking main flow
   }
 };
@@ -57,25 +56,25 @@ const getLogsByUser = async (userId, limit = 50) => {
     `;
     return logs;
   } catch (error) {
-    console.error('Error getting logs by user:', error);
+    console.error('[ActivityLog] Failed to get logs by user:', error.message);
     return [];
   }
 };
 
 /**
- * Get logs by peserta ujian ID
+ * Get logs by exam participant ID
  */
-const getLogsByPesertaUjian = async (pesertaUjianId, limit = 50) => {
+const getLogsByExamParticipant = async (examParticipantId, limit = 50) => {
   try {
     const logs = await prisma.$queryRaw`
       SELECT * FROM activity_logs 
-      WHERE peserta_ujian_id = ${pesertaUjianId} 
+      WHERE exam_participant_id = ${examParticipantId} 
       ORDER BY created_at DESC 
       LIMIT ${limit}
     `;
     return logs;
   } catch (error) {
-    console.error('Error getting logs by peserta ujian:', error);
+    console.error('[ActivityLog] Failed to get logs by exam participant:', error.message);
     return [];
   }
 };
@@ -93,7 +92,7 @@ const getLogsByType = async (activityType, limit = 100) => {
     `;
     return logs;
   } catch (error) {
-    console.error('Error getting logs by type:', error);
+    console.error('[ActivityLog] Failed to get logs by type:', error.message);
     return [];
   }
 };
@@ -103,35 +102,34 @@ const getLogsByType = async (activityType, limit = 100) => {
  */
 const getAllLogs = async (filters = {}) => {
   try {
-    let query = 'SELECT * FROM activity_logs WHERE 1=1';
-    const params = [];
+    const where = {};
 
     if (filters.user_id) {
-      query += ` AND user_id = ?`;
-      params.push(filters.user_id);
+      where.user_id = filters.user_id;
     }
 
     if (filters.activity_type) {
-      query += ` AND activity_type = ?`;
-      params.push(filters.activity_type);
+      where.activity_type = filters.activity_type;
     }
 
-    if (filters.start_date) {
-      query += ` AND created_at >= ?`;
-      params.push(filters.start_date);
+    if (filters.start_date || filters.end_date) {
+      where.created_at = {};
+      if (filters.start_date) {
+        where.created_at.gte = filters.start_date;
+      }
+      if (filters.end_date) {
+        where.created_at.lte = filters.end_date;
+      }
     }
 
-    if (filters.end_date) {
-      query += ` AND created_at <= ?`;
-      params.push(filters.end_date);
-    }
-
-    query += ` ORDER BY created_at DESC LIMIT ${filters.limit || 100}`;
-
-    const logs = await prisma.$queryRawUnsafe(query, ...params);
+    const logs = await prisma.activityLog.findMany({
+      where,
+      orderBy: { created_at: 'desc' },
+      take: filters.limit || 100,
+    });
     return logs;
   } catch (error) {
-    console.error('Error getting all logs:', error);
+    console.error('[ActivityLog] Failed to get all logs:', error.message);
     return [];
   }
 };
@@ -157,7 +155,7 @@ const getUserAgent = (req) => {
 module.exports = {
   createLog,
   getLogsByUser,
-  getLogsByPesertaUjian,
+  getLogsByExamParticipant,
   getLogsByType,
   getAllLogs,
   getIpAddress,

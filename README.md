@@ -1,227 +1,253 @@
 # CBT Backend API
 
-Backend system for Computer-Based Test (CBT) application with user authentication and role-based access control.
+Backend server for the Computer-Based Test (CBT) application built with Node.js, Express, and Prisma ORM.
 
 ## Features
 
-- 🔐 User Authentication (Login/Register)
-- 👥 Role-Based Access Control (Admin, Guru, Siswa)
-- 🗄️ MySQL Database with Prisma ORM
-- 🔒 Password Hashing with bcryptjs
-- 🎯 JWT Token Authentication
-- ✅ Request Validation with Joi
+- **JWT Authentication** — Login, register, profile management with token-based auth
+- **Role-Based Access Control** — Admin, Teacher, Student with middleware protection
+- **Super Admin** — Protected admin account that cannot be deleted or modified by other admins
+- **Question Bank Management** — CRUD with globally unique bank names
+- **Question Management** — Single Choice, Multiple Choice, and Essay with answer options
+- **Exam Management** — Create exams, assign questions from banks, auto-assign students
+- **Exam Taking** — Start exam, auto-save answers, finish exam with auto-grading
+- **Global Deadline** — All students share the same `end_date` deadline regardless of start time
+- **Auto-Finish Scheduler** — Automatically finishes exams past `end_date` every 60 seconds
+- **Auto-Expire Scheduler** — Automatically changes exam status to ENDED after `end_date`
+- **Grading** — Auto-grading for MC, manual grading for essay, score finalization
+- **Auto-Reassign Students** — Reassign exam participants when category (grade_level/major) changes
+- **Activity Logging** — Logs LOGIN, START_UJIAN, FINISH_UJIAN, AUTO_FINISH, etc.
+- **Activity Monitoring** — Admin real-time exam monitoring, block/unblock participants
+- **Active Users Tracking** — View users who logged in within N hours
 
 ## Tech Stack
 
-- **Node.js** & **Express.js** - Backend framework
-- **Prisma** - Database ORM
-- **MySQL** - Database
-- **JWT** - Authentication tokens
-- **bcryptjs** - Password encryption
-- **Joi** - Validation
+| Component | Technology |
+|-----------|-----------|
+| Runtime | Node.js v18+ |
+| Framework | Express.js v5 |
+| ORM | Prisma v6.19 |
+| Database | MySQL (XAMPP) |
+| Auth | JWT (jsonwebtoken) |
+| Encryption | bcryptjs |
+| Validation | Joi |
 
-## Prerequisites
+## Setup
 
-Before installation, make sure you have:
+### Prerequisites
 
-- Node.js (v14 or higher)
-- MySQL Database
-- npm or yarn package manager
+- Node.js v18+
+- MySQL database (XAMPP/WAMP or standalone)
+- npm
 
-## Installation
+### Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd cbt-backend
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Configure environment variables**
-   
-   Create a `.env` file in the root directory:
-   ```env
-   DATABASE_URL="mysql://username:password@localhost:3306/database_name"
-   PORT=3000
-   JWT_SECRET=your_jwt_secret_key
-   ```
-   
-   Replace:
-   - `username` - your MySQL username
-   - `password` - your MySQL password
-   - `database_name` - your database name
-   - `your_jwt_secret_key` - a secure random string for JWT
-
-4. **Run Prisma migrations**
-   ```bash
-   npx prisma migrate dev
-   ```
-
-5. **Generate Prisma Client**
-   ```bash
-   npx prisma generate
-   ```
-
-## Running the Application
-
-### Development Mode (with auto-reload)
 ```bash
-npm run dev
+cd cbt-backend
+npm install
 ```
 
-### Production Mode
+### Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
+DATABASE_URL="mysql://username:password@localhost:3306/cbt_database"
+PORT=3000
+JWT_SECRET=your_secret_key_here
+```
+
+### Database Setup
+
 ```bash
+# Generate Prisma Client
+npx prisma generate
+
+# Push schema to database (creates tables)
+npx prisma db push
+
+# Seed sample data (optional)
+npx prisma db seed
+```
+
+**Seed data creates:** 3 Admins (1 Super Admin), 8 Teachers, 108 Students, 36 Question Banks, 720 Questions, 13 Exams, ~156 Exam Participants, ~510 Answers, 25 Exam Results, ~142 Activity Logs.
+
+### Running the Server
+
+```bash
+# Development (auto-reload)
+npm run dev
+
+# Production
 node index.js
 ```
 
-The server will start on `http://localhost:3000` (or the PORT specified in your .env file).
+Server runs at `http://localhost:3000`. On startup, two schedulers automatically activate:
 
-## Database Schema
+- **Auto-Finish Scheduler** — Checks for expired sessions every 60 seconds, auto-finishes students past `end_date`
+- **Auto-Expire Scheduler** — Checks for exams past `end_date`, changes status to ENDED
 
-The application uses the following user roles:
+### Useful Commands
 
-- **Admin** - Full system access
-- **Guru** (Teacher) - Can manage tests and view student results
-- **Siswa** (Student) - Can take tests
+```bash
+npx prisma studio          # GUI database browser
+npx prisma db push --force-reset  # Reset database (delete all data + recreate)
+npx prisma db seed          # Re-seed sample data
+npx prisma generate         # Regenerate client after schema changes
+```
 
-Each user has a profile table (admins, gurus, or siswas) linked to the main users table.
+## Coding Standards
 
-## API Endpoints
+### Naming Conventions
 
-Total: **33 endpoints** dengan role-based access control
+| Context | Convention | Example |
+|---------|-----------|---------|
+| Prisma Model | PascalCase English | `QuestionBank`, `ExamParticipant` |
+| Prisma Field | snake_case English | `question_bank_id`, `full_name` |
+| DB Table | snake_case English (via `@@map`) | `question_banks`, `exam_participants` |
+| DB Column | Same as field name (no `@map`) | `full_name`, `grade_level` |
+| Enum Type | PascalCase English | `ExamStatus`, `QuestionType` |
+| Enum Value | UPPER_SNAKE English | `SINGLE_CHOICE`, `IN_PROGRESS` |
+| JS Variable | camelCase | `examParticipant`, `totalScore` |
+| JS Function | camelCase | `getMyExams`, `startExam` |
+| Route Path | kebab-case | `/assign-question`, `/exam-results` |
+| File Name | camelCase | `studentController.js`, `examRoutes.js` |
 
-### 🔐 Authentication (`/api/auth`)
+### Code Style
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/api/auth/register` | Register user baru | No |
-| POST | `/api/auth/login` | Login user | No |
+- **Controllers** handle request/response only — business logic in services when complex
+- **Services** encapsulate reusable logic (activity logging, auto-finish scoring, etc.)
+- **Middleware** handles auth verification, role checking, input validation
+- **Routes** define HTTP method + path + middleware chain + controller function
+- Named routes (e.g., `/assign-question`) must be defined **before** parameterized routes (e.g., `/:id`) to avoid Express route shadowing
+- All Prisma queries use **English field names** — DB columns match field names directly (no `@map` translation)
+- Error responses use `{ error: "message" }` format
+- Success responses use `{ message: "...", data: {...} }` format (varies per endpoint)
 
-### 📝 Soal Management (`/api/soal`)
-
-**Role Required:** Guru
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/soal` | Create soal baru |
-| GET | `/api/soal` | Get semua soal (dengan filter) |
-| GET | `/api/soal/:id` | Get soal by ID |
-| PUT | `/api/soal/:id` | Update soal |
-| DELETE | `/api/soal/:id` | Delete soal |
-
-### 📋 Ujian Management (`/api/ujian`)
-
-**Role Required:** Guru
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/ujian` | Create ujian baru |
-| GET | `/api/ujian` | Get semua ujian |
-| GET | `/api/ujian/:id` | Get ujian by ID |
-| PUT | `/api/ujian/:id` | Update ujian |
-| DELETE | `/api/ujian/:id` | Delete ujian |
-| POST | `/api/ujian/assign-soal` | Assign soal ke ujian |
-| DELETE | `/api/ujian/remove-soal/:id` | Remove soal dari ujian |
-| POST | `/api/ujian/assign-siswa` | Assign siswa ke ujian |
-
-### 🎓 Siswa - Ujian (`/api/siswa`)
-
-**Role Required:** Siswa
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/siswa/ujians` | Get ujian yang di-assign |
-| POST | `/api/siswa/ujians/start` | Mulai ujian |
-| POST | `/api/siswa/ujians/jawaban` | Submit jawaban per soal |
-| POST | `/api/siswa/ujians/finish` | Finish ujian |
-| GET | `/api/siswa/ujians/hasil/:peserta_ujian_id` | Get hasil ujian |
-
-### 👥 User Management (`/api/users`)
-
-**Admin Endpoints:**
-
-| Method | Endpoint | Description | Role |
-|--------|----------|-------------|------|
-| GET | `/api/users` | Get semua users | Admin |
-| POST | `/api/users` | Create user baru | Admin |
-| POST | `/api/users/batch` | Batch import users (CSV/Excel) | Admin |
-| PUT | `/api/users/:id/role` | Update role user | Admin |
-| PATCH | `/api/users/:id/status` | Toggle status aktif user | Admin |
-| DELETE | `/api/users/:id` | Delete user | Admin |
-
-**Guru Endpoints:**
-
-| Method | Endpoint | Description | Role |
-|--------|----------|-------------|------|
-| POST | `/api/users/nilai` | Nilai jawaban essay manual | Guru |
-| POST | `/api/users/finalisasi` | Finalisasi nilai ujian | Guru |
-
-### 📊 Activity Management (`/api/admin/activities`)
-
-**Role Required:** Admin
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/admin/activities` | Get semua aktivitas ujian |
-| GET | `/api/admin/activities/:ujianId/participants` | Get peserta ujian |
-| GET | `/api/admin/activities/participant/:pesertaUjianId` | Get detail peserta |
-| POST | `/api/admin/activities/:pesertaUjianId/block` | Block peserta ujian |
-| POST | `/api/admin/activities/:pesertaUjianId/generate-unlock` | Generate unlock code |
-| POST | `/api/admin/activities/:pesertaUjianId/unblock` | Unblock peserta |
-
-> **Note:** Untuk detail request/response format, lihat [API_DOCUMENTATION.md](API_DOCUMENTATION.md)
-
-## Project Structure
+### Project Structure
 
 ```
 cbt-backend/
+├── index.js                    # Entry point, route mounting, scheduler start
+├── package.json
+├── API_DOCUMENTATION.md        # Full API reference (70 endpoints)
 ├── prisma/
-│   ├── schema.prisma       # Database schema
-│   └── migrations/         # Migration files
+│   ├── schema.prisma           # Database schema (14 models, 4 enums, all English)
+│   ├── seed.js                 # Sample data seeder
+│   └── migrations/             # Migration history
 ├── src/
 │   ├── config/
-│   │   └── db.js          # Database configuration
+│   │   └── db.js               # Prisma Client singleton
 │   ├── controllers/
-│   │   └── authController.js
+│   │   ├── authController.js         # Login, register, profile
+│   │   ├── questionController.js     # Question bank CRUD + question CRUD
+│   │   ├── examController.js         # Exam CRUD + assign questions/students
+│   │   ├── studentController.js      # Student exam operations
+│   │   ├── userController.js         # Admin user management + teacher grading
+│   │   ├── activityController.js     # Admin exam monitoring
+│   │   ├── activityLogController.js  # Activity log queries
+│   │   └── examResultController.js   # Exam results
 │   ├── middlewares/
-│   │   └── validationMiddleware.js
-│   └── routes/
-│       └── authRoutes.js
-├── index.js               # Application entry point
-├── package.json
-└── .env                   # Environment variables (create this)
+│   │   ├── validationMiddleware.js   # JWT verify, role check, input validation
+│   │   └── resolveRole.js           # Resolve teacher/student from JWT user
+│   ├── routes/
+│   │   ├── authRoutes.js
+│   │   ├── questionRoutes.js
+│   │   ├── examRoutes.js
+│   │   ├── studentRoutes.js
+│   │   ├── userRoutes.js
+│   │   ├── activityRoutes.js
+│   │   ├── examResultRoutes.js
+│   │   └── activityLogRoutes.js
+│   └── services/
+│       ├── activityLogService.js     # Activity log CRUD
+│       ├── autoFinishService.js      # Auto-finish expired sessions
+│       ├── autoExpireExamService.js  # Auto-expire exam status
+│       ├── examService.js           # Exam business logic (guard, weights)
+│       ├── scoreService.js          # Score calculation & grading
+│       └── userService.js           # User CRUD & profile management
+└── tests/
+    └── integration/
 ```
 
-## Useful Commands
+## Database Schema
 
-```bash
-# View database in Prisma Studio
-npx prisma studio
+### Models (14)
 
-# Reset database
-npx prisma migrate reset
+| Model | DB Table | Description |
+|-------|----------|-------------|
+| User | users | User accounts (username, password, role) |
+| Admin | admins | Admin profile |
+| Teacher | teachers | Teacher profile |
+| Student | students | Student profile (classroom, grade_level, major) |
+| QuestionBank | question_banks | Question bank (globally unique name) |
+| Question | questions | Question (Single Choice, Multiple Choice, Essay) |
+| AnswerOption | answer_options | MC answer options |
+| Exam | exams | Exam (schedule, duration, status) |
+| ExamQuestion | exam_questions | Question assigned to exam (weight, sequence) |
+| ExamParticipant | exam_participants | Student participation (status, times, block) |
+| Answer | answers | Student answer (MC option IDs or essay text) |
+| ExamResult | exam_results | Final exam score |
+| ActivityLog | activity_logs | System activity log |
+| Migration | migrations | Laravel migration compatibility |
 
-# Check Prisma migration status
-npx prisma migrate status
-```
+### Enums (4)
 
-## Development
+| Enum | Values |
+|------|--------|
+| Role | `admin`, `teacher`, `student` |
+| ExamStatus | `SCHEDULED`, `ONGOING`, `ENDED` |
+| ExamParticipantStatus | `NOT_STARTED`, `IN_PROGRESS`, `COMPLETED`, `GRADED` |
+| QuestionType | `SINGLE_CHOICE`, `MULTIPLE_CHOICE`, `ESSAY` |
 
-To contribute or modify:
+## Global Deadline System
 
-1. Make your changes
-2. Test thoroughly
-3. Update migrations if schema changes
-4. Run `npx prisma generate` after schema changes
+All exam participants share the same deadline: **`exam.end_date`**.
+
+When a teacher creates an exam, they set `start_date` (when students can begin) and `end_date` (when ALL students must finish). Every student must complete their exam by `end_date`, regardless of when they personally started.
+
+### Auto-Finish Flow
+
+1. Scheduler runs every 60 seconds
+2. Queries all `ExamParticipant` with status `IN_PROGRESS`
+3. For each: checks if `now > exam.end_date`
+4. If expired:
+   - Auto-grades MC answers (Single Choice: exact match, Multiple Choice: exact set match)
+   - Essay questions are skipped (require manual teacher grading)
+   - Creates `ExamResult` with calculated `final_score`
+   - Updates status to `COMPLETED` (has essay) or `GRADED` (no essay)
+   - Logs `AUTO_FINISH_UJIAN` activity
+
+### Auto-Expire Flow
+
+1. Scheduler runs every 60 seconds
+2. Queries all `Exam` with status `SCHEDULED` or `ONGOING` where `end_date < now`
+3. Updates exam status to `ENDED`
+4. Logs `UJIAN_AUTO_EXPIRED` activity
+
+### Activity Types
+
+| Type | Description |
+|------|-------------|
+| `LOGIN` | User logged in |
+| `START_UJIAN` | Student started an exam |
+| `FINISH_UJIAN` | Student manually finished an exam |
+| `AUTO_FINISH_UJIAN` | Exam auto-finished (past end_date) |
+| `UJIAN_AUTO_EXPIRED` | Exam status changed to ENDED automatically |
+| `UJIAN_MANUAL_EXPIRED` | Exam status changed to ENDED manually |
+| `REASSIGN_STUDENTS` | Exam participants reassigned after category change |
+
+## API Documentation
+
+See [API_DOCUMENTATION.md](API_DOCUMENTATION.md) for the complete reference of all 70 endpoints with request/response examples.
+
+## Super Admin
+
+- **admin1** is the Super Admin (set in seed)
+- Super Admin cannot be deleted, role-changed, or deactivated by other admins
+- JWT payload includes `is_super_admin: true/false`
+- Dashboard displays a special badge for Super Admin
 
 ## License
 
 ISC
-
-## Support
-
-For issues or questions, please create an issue in the repository.
