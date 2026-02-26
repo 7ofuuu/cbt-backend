@@ -1,533 +1,505 @@
+/**
+ * User Controller - Refactored
+ * Uses asyncHandler and userService helpers.
+ * Eliminates: 3 classroom validation copies, 3 user creation copies,
+ * 4 duplicated pagination blocks, and misplaced scoring functions.
+ * Scoring moved to use scoreService.
+ */
 const prisma = require('../config/db');
 const bcrypt = require('bcryptjs');
+const { asyncHandler, AppError } = require('../utils/asyncHandler');
+const {
+  validateClassroomConsistency,
+  createUserWithProfile,
+  buildPagination,
+  paginatedResponse,
+  formatUserData,
+  SALT_ROUNDS,
+} = require('../services/userService');
+const { calculateAndSaveResult } = require('../services/scoreService');
+const activityLogService = require('../services/activityLogService');
 
-// Get All Users (Admin only)
-const getAllUsers = async (req, res) => {
-  const { role, status_aktif, username } = req.query;
+// ==================== USER LISTING (consolidated pagination) ====================
 
-  try {
-    const filters = {};
-    if (role) filters.role = role;
-    if (status_aktif !== undefined) filters.status_aktif = status_aktif === 'true';
-    if (username) filters.username = username;
+/**
+ * Generic user listing with pagination and search.
+ * Replaces 4 near-identical functions.
+ */
+const listUsers = (roleFilter = null) =>
+  asyncHandler(async (req, res) => {
+    const { search } = req.query;
+    const { skip, take, page, limit } = buildPagination(req.query);
 
-    const users = await prisma.user.findMany({
-      where: filters,
-      include: {
-        admin: true,
-        guru: true,
-        siswa: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    res.json({ users });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-// Create User (Admin only) - sama seperti register
-const createUser = async (req, res) => {
-  const { username, password, role, nama, kelas, tingkat, jurusan } = req.body;
-
-  // Validate required fields
-  if (!username || !password || !role || !nama) {
-    return res.status(400).json({
-      error: 'Data tidak lengkap. Username, password, role, dan nama wajib diisi.'
-    });
-  }
-
-  // Validate role-specific fields
-  if (role === 'siswa' && (!kelas || !tingkat || !jurusan)) {
-    return res.status(400).json({
-      error: 'Data siswa tidak lengkap. Kelas, tingkat, dan jurusan wajib diisi untuk siswa.'
-    });
-  }
-
-  // Validate tingkat value
-  const validTingkats = ['X', 'XI', 'XII'];
-  if (role === 'siswa' && !validTingkats.includes(tingkat)) {
-    return res.status(400).json({
-      error: `Tingkat tidak valid. Pilih salah satu: ${validTingkats.join(', ')}`
-    });
-  }
-
-  // Validate jurusan value
-  const validJurusans = ['IPA', 'IPS', 'Bahasa'];
-  if (role === 'siswa' && !validJurusans.includes(jurusan)) {
-    return res.status(400).json({
-      error: `Jurusan tidak valid. Pilih salah satu: ${validJurusans.join(', ')}`
-    });
-  }
-
-  // Validate kelas format for siswa (must be "X-IPA-1" or "XII-IPS-2" format)
-  if (role === 'siswa') {
-    // Format: tingkat-jurusan-nomor (contoh: XII-IPA-1, X-IPS-2)
-    const kelasPattern = /^(X|XI|XII)-(IPA|IPS|Bahasa)-(\d+)$/;
-    if (!kelasPattern.test(kelas)) {
-      return res.status(400).json({
-        error: 'Format kelas tidak valid. Gunakan format: tingkat-jurusan-nomor (contoh: XII-IPA-1, X-IPS-2)'
-      });
+    const where = {};
+    if (roleFilter) where.role = roleFilter;
+    if (search) {
+      where.OR = [
+        { username: { contains: search } },
+        { admin: { full_name: { contains: search } } },
+        { teacher: { full_name: { contains: search } } },
+        { student: { full_name: { contains: search } } },
+      ];
     }
 
-    // Validate consistency: kelas must match tingkat and jurusan
-    const [, kelasTingkat, kelasJurusan] = kelas.match(kelasPattern);
-    
-    if (kelasTingkat !== tingkat) {
-      return res.status(400).json({
-        error: `Tingkat pada kelas (${kelasTingkat}) tidak sesuai dengan tingkat yang dipilih (${tingkat})`
-      });
-    }
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        include: { admin: true, teacher: true, student: true },
+        orderBy: { created_at: 'desc' },
+        skip,
+        take,
+      }),
+      prisma.user.count({ where }),
+    ]);
 
-    if (kelasJurusan !== jurusan) {
-      return res.status(400).json({
-        error: `Jurusan pada kelas (${kelasJurusan}) tidak sesuai dengan jurusan yang dipilih (${jurusan})`
-      });
+    const formatted = users.map(formatUserData);
+    res.json(paginatedResponse(formatted, total, page, limit));
+  });
+
+const getAllUsers = listUsers();
+const getAllAdmins = listUsers('admin');
+const getAllTeachers = listUsers('teacher');
+const getAllStudents = listUsers('student');
+
+// GET /api/users/count - Count users by role
+const countUsersByRole = asyncHandler(async (req, res) => {
+  const [adminCount, teacherCount, studentCount, totalCount] = await Promise.all([
+    prisma.user.count({ where: { role: 'admin' } }),
+    prisma.user.count({ where: { role: 'teacher' } }),
+    prisma.user.count({ where: { role: 'student' } }),
+    prisma.user.count(),
+  ]);
+
+  res.json({
+    admin: adminCount,
+    teacher: teacherCount,
+    student: studentCount,
+    total: totalCount,
+  });
+});
+
+// GET /api/users/:id - Get user detail
+const getUserDetail = asyncHandler(async (req, res) => {
+  const user = await prisma.user.findUnique({
+    where: { id: parseInt(req.params.id) },
+    include: { admin: true, teacher: true, student: true },
+  });
+
+  if (!user) throw new AppError('User tidak ditemukan', 404);
+
+  res.json({ user: formatUserData(user) });
+});
+
+// PUT /api/users/:id - Update user
+const updateUser = asyncHandler(async (req, res) => {
+  const userId = parseInt(req.params.id);
+  const { username, password, full_name, classroom, grade_level, major, nisn, nip } = req.body;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { admin: true, teacher: true, student: true },
+  });
+
+  if (!user) throw new AppError('User tidak ditemukan', 404);
+
+  // Validate username uniqueness if changing
+  if (username && username !== user.username) {
+    const existingUser = await prisma.user.findUnique({ where: { username } });
+    if (existingUser) {
+      throw new AppError('Username sudah digunakan', 409);
     }
   }
 
-  try {
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const result = await prisma.$transaction(async tx => {
-      const newUser = await tx.user.create({
-        data: {
-          username,
-          password: hashedPassword,
-          role,
-        },
-      });
-
-      if (role === 'siswa') {
-        await tx.siswa.create({
-          data: {
-            userId: newUser.id,
-            nama_lengkap: nama,
-            kelas,
-            tingkat,
-            jurusan,
-          },
-        });
-      } else if (role === 'guru') {
-        await tx.guru.create({
-          data: {
-            userId: newUser.id,
-            nama_lengkap: nama,
-          },
-        });
-      } else if (role === 'admin') {
-        await tx.admin.create({
-          data: {
-            userId: newUser.id,
-            nama_lengkap: nama,
-          },
-        });
-      }
-
-      return newUser;
-    });
-
-    res.status(201).json({ message: 'User berhasil dibuat', userId: result.id });
-  } catch (error) {
-    console.error('Error creating user:', error);
-    if (error.code === 'P2002') {
-      return res.status(400).json({ error: 'Username sudah digunakan' });
-    }
-    res.status(500).json({ error: error.message });
-  }
-};
-
-// Update User Role (Admin only)
-const updateUserRole = async (req, res) => {
-  const { id } = req.params;
-  const { role } = req.body;
-
-  try {
-    // Validasi role
-    if (!['admin', 'guru', 'siswa'].includes(role)) {
-      return res.status(400).json({ error: 'Role tidak valid' });
+  await prisma.$transaction(async (tx) => {
+    // Update base user
+    const userData = {};
+    if (username) userData.username = username;
+    if (password) userData.password = await bcrypt.hash(password, SALT_ROUNDS);
+    if (Object.keys(userData).length > 0) {
+      await tx.user.update({ where: { id: userId }, data: userData });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: parseInt(id) },
-      include: { admins: true, gurus: true, siswas: true },
-    });
+    // Update role-specific profile
+    if (user.role === 'student' && user.student) {
+      const studentData = {};
+      if (full_name !== undefined) studentData.full_name = full_name;
+      if (nisn !== undefined) studentData.nisn = nisn;
 
-    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
-
-    // Jika role sama, skip
-    if (user.role === role) {
-      return res.status(400).json({ error: 'Role sudah sama' });
-    }
-
-    await prisma.$transaction(async tx => {
-      // Hapus profil lama
-      if (user.admin) await tx.admin.delete({ where: { userId: user.id } });
-      if (user.guru) await tx.guru.delete({ where: { userId: user.id } });
-      if (user.siswa) await tx.siswa.delete({ where: { userId: user.id } });
-
-      // Update role
-      await tx.user.update({
-        where: { id: parseInt(id) },
-        data: { role },
-      });
-
-      // Buat profil baru (dengan data default)
-      if (role === 'admin') {
-        await tx.admin.create({ data: { userId: user.id, nama_lengkap: 'Admin' } });
-      } else if (role === 'guru') {
-        await tx.guru.create({ data: { userId: user.id, nama_lengkap: 'Guru' } });
-      } else if (role === 'siswa') {
-        await tx.siswa.create({
-          data: {
-            userId: user.id,
-            nama_lengkap: 'Siswa',
-            kelas: '-',
-            tingkat: '-',
-            jurusan: '-',
-          },
-        });
-      }
-    });
-
-    res.json({ message: 'Role user berhasil diubah' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-// Toggle User Status (Admin only)
-const toggleUserStatus = async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const user = await prisma.user.findUnique({ where: { id: parseInt(id) } });
-    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
-
-    const updated = await prisma.user.update({
-      where: { id: parseInt(id) },
-      data: { status_aktif: !user.status_aktif },
-    });
-
-    res.json({
-      message: `User ${updated.status_aktif ? 'diaktifkan' : 'dinonaktifkan'}`,
-      status_aktif: updated.status_aktif,
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-// Delete User (Admin only)
-const deleteUser = async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const user = await prisma.user.findUnique({ where: { id: parseInt(id) } });
-    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
-
-    await prisma.user.delete({ where: { id: parseInt(id) } });
-
-    res.json({ message: 'User berhasil dihapus' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-// Nilai Siswa (Guru) - untuk essay manual
-const nilaiJawaban = async (req, res) => {
-  const { jawaban_id, nilai_manual } = req.body;
-
-  try {
-    // Validate nilai range
-    if (nilai_manual < 0 || nilai_manual > 100) {
-      return res.status(400).json({ error: 'Nilai harus antara 0-100' });
-    }
-
-    const jawaban = await prisma.jawabans.findUnique({
-      where: { jawaban_id },
-      include: {
-        soal: true,
-        pesertaUjian: {
-          include: {
-            ujian: {
-              include: { guru: true },
-            },
-          },
-        },
-      },
-    });
-
-    if (!jawaban) return res.status(404).json({ error: 'Jawaban tidak ditemukan' });
-
-    // Check ownership guru
-    if (jawaban.pesertaUjian.ujian.guru.userId !== req.user.id) {
-      return res.status(403).json({ error: 'Anda tidak berhak menilai jawaban ini' });
-    }
-
-    const updatedJawaban = await prisma.jawabans.update({
-      where: { jawaban_id },
-      data: { nilai_manual },
-    });
-
-    res.json({ message: 'Jawaban berhasil dinilai', jawaban: updatedJawaban });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-// Finalisasi Nilai (Guru) - hitung total nilai
-const finalisasiNilai = async (req, res) => {
-  const { peserta_ujian_id } = req.body;
-
-  try {
-    const pesertaUjian = await prisma.peserta_ujians.findUnique({
-      where: { peserta_ujian_id },
-      include: {
-        ujian: {
-          include: {
-            guru: true,
-            soalUjians: true,
-          },
-        },
-        jawabans: {
-          include: { soal: true },
-        },
-      },
-    });
-
-    if (!pesertaUjian) return res.status(404).json({ error: 'Peserta ujian tidak ditemukan' });
-
-    // Check ownership
-    if (pesertaUjian.ujian.guru.userId !== req.user.id) {
-      return res.status(403).json({ error: 'Anda tidak berhak menilai ujian ini' });
-    }
-
-    // Hitung total nilai
-    let totalNilai = 0;
-    let totalBobot = 0;
-
-    for (const jawaban of pesertaUjian.jawabans) {
-      const soalUjian = pesertaUjian.ujian.soalUjians.find(su => su.soal_id === jawaban.soal_id);
-      if (!soalUjian) continue;
-
-      const bobot = soalUjian.bobot_nilai;
-      totalBobot += bobot;
-
-      // Hitung nilai per soal
-      if (jawaban.soal.tipe_soal === 'ESSAY') {
-        // Untuk essay, gunakan nilai manual
-        if (jawaban.nilai_manual !== null) {
-          totalNilai += (jawaban.nilai_manual / 100) * bobot;
-        }
+      if (classroom !== undefined) {
+        const derived = validateClassroomConsistency(
+          classroom,
+          grade_level || user.student.grade_level,
+          major || user.student.major
+        );
+        studentData.classroom = classroom;
+        studentData.grade_level = derived.grade_level;
+        studentData.major = derived.major;
       } else {
-        // Untuk pilihan ganda, gunakan is_correct
-        if (jawaban.is_correct) {
-          totalNilai += bobot;
-        }
+        if (grade_level !== undefined) studentData.grade_level = grade_level;
+        if (major !== undefined) studentData.major = major;
+      }
+
+      if (Object.keys(studentData).length > 0) {
+        await tx.student.update({
+          where: { student_id: user.student.student_id },
+          data: studentData,
+        });
+      }
+    } else if (user.role === 'teacher' && user.teacher) {
+      const teacherData = {};
+      if (full_name !== undefined) teacherData.full_name = full_name;
+      if (nip !== undefined) teacherData.nip = nip;
+      if (Object.keys(teacherData).length > 0) {
+        await tx.teacher.update({
+          where: { teacher_id: user.teacher.teacher_id },
+          data: teacherData,
+        });
+      }
+    } else if (user.role === 'admin' && user.admin) {
+      if (full_name !== undefined) {
+        await tx.admin.update({
+          where: { admin_id: user.admin.admin_id },
+          data: { full_name },
+        });
       }
     }
+  });
 
-    // Konversi ke skala 0-100
-    const nilaiAkhir = totalBobot > 0 ? (totalNilai / totalBobot) * 100 : 0;
+  // Refetch updated user
+  const updated = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { admin: true, teacher: true, student: true },
+  });
 
-    // Simpan atau update hasil ujian
-    const existingHasil = await prisma.hasilUjian.findUnique({
-      where: { peserta_ujian_id },
-    });
+  res.json({ message: 'User berhasil diperbarui', user: formatUserData(updated) });
+});
 
-    if (existingHasil) {
-      await prisma.hasilUjian.update({
-        where: { peserta_ujian_id },
-        data: { nilai_akhir: nilaiAkhir },
-      });
-    } else {
-      await prisma.hasilUjian.create({
-        data: {
-          peserta_ujian_id,
-          nilai_akhir: nilaiAkhir,
-        },
-      });
+// POST /api/users - Create user (uses userService)
+const createUser = asyncHandler(async (req, res) => {
+  const { username, password, role, full_name, classroom, grade_level, major, nisn, nip } = req.body;
+
+  if (!username || !password || !role || !full_name) {
+    throw new AppError('username, password, role, dan full_name wajib diisi', 400);
+  }
+
+  const validRoles = ['admin', 'teacher', 'student'];
+  if (!validRoles.includes(role)) {
+    throw new AppError(`role harus salah satu dari: ${validRoles.join(', ')}`, 400);
+  }
+
+  if (role === 'student' && !classroom) {
+    throw new AppError('classroom wajib diisi untuk siswa', 400);
+  }
+
+  const user = await createUserWithProfile({
+    username, password, role, full_name, classroom, grade_level, major, nisn, nip,
+  });
+
+  res.status(201).json({ message: 'User berhasil dibuat', userId: user.id });
+});
+
+// PUT /api/users/:id/role - Update user role
+const updateUserRole = asyncHandler(async (req, res) => {
+  const userId = parseInt(req.params.id);
+  const { new_role } = req.body;
+
+  if (!new_role) throw new AppError('new_role wajib diisi', 400);
+
+  const validRoles = ['admin', 'teacher', 'student'];
+  if (!validRoles.includes(new_role)) {
+    throw new AppError(`new_role harus salah satu dari: ${validRoles.join(', ')}`, 400);
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { admin: true, teacher: true, student: true },
+  });
+
+  if (!user) throw new AppError('User tidak ditemukan', 404);
+  if (user.is_super_admin) throw new AppError('Tidak dapat mengubah role super admin', 403);
+  if (user.role === new_role) throw new AppError('User sudah memiliki role tersebut', 400);
+
+  await prisma.$transaction(async (tx) => {
+    // Delete old profile
+    if (user.role === 'admin' && user.admin) {
+      await tx.admin.delete({ where: { admin_id: user.admin.admin_id } });
+    } else if (user.role === 'teacher' && user.teacher) {
+      await tx.teacher.delete({ where: { teacher_id: user.teacher.teacher_id } });
+    } else if (user.role === 'student' && user.student) {
+      await tx.student.delete({ where: { student_id: user.student.student_id } });
     }
 
-    // Update status peserta ujian
-    await prisma.peserta_ujians.update({
-      where: { peserta_ujian_id },
-      data: { status_ujian: 'DINILAI' },
-    });
+    // Update role
+    await tx.user.update({ where: { id: userId }, data: { role: new_role } });
 
-    res.json({
-      message: 'Nilai berhasil difinalisasi',
-      nilai_akhir: nilaiAkhir.toFixed(2),
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    // Create new profile with defaults
+    const fullName = user.admin?.full_name || user.teacher?.full_name || user.student?.full_name || 'User';
+    if (new_role === 'admin') {
+      await tx.admin.create({ data: { user_id: userId, full_name: fullName } });
+    } else if (new_role === 'teacher') {
+      await tx.teacher.create({ data: { user_id: userId, full_name: fullName } });
+    } else if (new_role === 'student') {
+      await tx.student.create({
+        data: { user_id: userId, full_name: fullName, classroom: '', grade_level: '', major: '' },
+      });
+    }
+  });
+
+  res.json({ message: `Role berhasil diubah ke ${new_role}` });
+});
+
+// PUT /api/users/:id/status - Toggle user active status
+const toggleUserStatus = asyncHandler(async (req, res) => {
+  const userId = parseInt(req.params.id);
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError('User tidak ditemukan', 404);
+  if (user.is_super_admin) throw new AppError('Tidak dapat menonaktifkan super admin', 403);
+  if (userId === req.user.id) throw new AppError('Tidak dapat mengubah status akun sendiri', 400);
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { is_active: !user.is_active },
+  });
+
+  res.json({
+    message: `Status user berhasil diubah ke ${updated.is_active ? 'aktif' : 'nonaktif'}`,
+    is_active: updated.is_active,
+  });
+});
+
+// DELETE /api/users/:id - Delete user
+const deleteUser = asyncHandler(async (req, res) => {
+  const userId = parseInt(req.params.id);
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError('User tidak ditemukan', 404);
+  if (user.is_super_admin) throw new AppError('Tidak dapat menghapus super admin', 403);
+  if (userId === req.user.id) throw new AppError('Tidak dapat menghapus akun sendiri', 400);
+
+  await prisma.user.delete({ where: { id: userId } });
+  res.json({ message: 'User berhasil dihapus' });
+});
+
+// POST /api/users/score - Manual essay scoring (teacher)
+const scoreAnswer = asyncHandler(async (req, res) => {
+  const { answer_id, manual_score } = req.body;
+
+  if (!answer_id) throw new AppError('answer_id wajib diisi', 400);
+
+  const score = parseFloat(manual_score);
+  if (isNaN(score) || score < 0 || score > 100) {
+    throw new AppError('Nilai manual harus antara 0 dan 100', 400);
   }
-};
 
-// Batch Create Users (Admin only)
-const batchCreateUsers = async (req, res) => {
+  // Verify teacher owns the exam this answer belongs to
+  const answer = await prisma.answer.findUnique({
+    where: { answer_id: parseInt(answer_id) },
+    include: {
+      exam_participant: {
+        include: {
+          exam: { select: { teacher_id: true } },
+        },
+      },
+    },
+  });
+  if (!answer) throw new AppError('Jawaban tidak ditemukan', 404);
+
+  // Check ownership via teacher profile
+  const teacher = await prisma.teacher.findUnique({ where: { user_id: req.user.id } });
+  if (!teacher || answer.exam_participant.exam.teacher_id !== teacher.teacher_id) {
+    throw new AppError('Anda tidak memiliki akses ke jawaban ini', 403);
+  }
+
+  const updated = await prisma.answer.update({
+    where: { answer_id: parseInt(answer_id) },
+    data: { manual_score: score },
+  });
+
+  // Recalculate result after manual score update
+  const recalculated = await calculateAndSaveResult(answer.exam_participant_id);
+
+  // Audit log
+  await activityLogService.createLog({
+    user_id: req.user.id,
+    activity_type: 'UPDATE_MANUAL_SCORE',
+    description: `Teacher updated manual score for answer ${answer_id} to ${manual_score}`,
+    metadata: { answer_id: parseInt(answer_id), manual_score: score },
+  });
+
+  res.json({ message: 'Nilai manual berhasil diupdate', answer: updated, recalculated: { final_score: recalculated.finalScore, status: recalculated.status } });
+});
+
+// POST /api/users/finalize - Finalize score (uses scoreService)
+const finalizeScore = asyncHandler(async (req, res) => {
+  const { exam_participant_id } = req.body;
+
+  if (!exam_participant_id) throw new AppError('exam_participant_id wajib diisi', 400);
+
+  // Verify teacher owns the exam
+  const participant = await prisma.examParticipant.findUnique({
+    where: { exam_participant_id: parseInt(exam_participant_id) },
+    include: { exam: { select: { teacher_id: true } } },
+  });
+  if (!participant) throw new AppError('Peserta ujian tidak ditemukan', 404);
+
+  const teacher = await prisma.teacher.findUnique({ where: { user_id: req.user.id } });
+  if (!teacher || participant.exam.teacher_id !== teacher.teacher_id) {
+    throw new AppError('Anda tidak memiliki akses ke peserta ujian ini', 403);
+  }
+
+  const result = await calculateAndSaveResult(parseInt(exam_participant_id));
+
+  res.json({
+    message: 'Nilai berhasil difinalisasi',
+    result: {
+      exam_participant_id: parseInt(exam_participant_id),
+      final_score: result.finalScore,
+      total_score: result.totalScore,
+      total_weight: result.totalWeight,
+      has_essay: result.hasEssay,
+      status: result.status,
+    },
+  });
+});
+
+// POST /api/users/batch - Batch create users (uses userService)
+const batchCreateUsers = asyncHandler(async (req, res) => {
   const { users } = req.body;
 
   if (!Array.isArray(users) || users.length === 0) {
-    return res.status(400).json({ error: 'Data users harus berupa array dan tidak boleh kosong' });
+    throw new AppError('Array users wajib diisi', 400);
   }
 
-  const results = {
-    success: 0,
-    failed: 0,
-    total: users.length,
-    errors: [],
-  };
+  if (users.length > 500) {
+    throw new AppError('Maksimal 500 user per batch', 400);
+  }
 
-  try {
-    for (const userData of users) {
-      try {
-        const { username, password, role, nama, kelas, tingkat, jurusan } = userData;
+  const results = { success: [], failed: [], errors: [] };
 
-        // Validate required fields
-        if (!username || !password || !role || !nama) {
-          results.failed++;
-          results.errors.push({ username, error: 'Data tidak lengkap' });
-          continue;
-        }
-
-        // Validate role-specific fields
-        if (role === 'siswa' && (!kelas || !tingkat || !jurusan)) {
-          results.failed++;
-          results.errors.push({ username, error: 'Data siswa tidak lengkap (kelas, tingkat, jurusan)' });
-          continue;
-        }
-
-        // Validate tingkat value
-        const validTingkats = ['X', 'XI', 'XII'];
-        if (role === 'siswa' && !validTingkats.includes(tingkat)) {
-          results.failed++;
-          results.errors.push({ username, error: `Tingkat tidak valid: "${tingkat}". Pilih: ${validTingkats.join(', ')}` });
-          continue;
-        }
-
-        // Validate jurusan value
-        const validJurusans = ['IPA', 'IPS', 'Bahasa'];
-        if (role === 'siswa' && !validJurusans.includes(jurusan)) {
-          results.failed++;
-          results.errors.push({ username, error: `Jurusan tidak valid: "${jurusan}". Pilih: ${validJurusans.join(', ')}` });
-          continue;
-        }
-
-        // Validate kelas format for siswa (tingkat-jurusan-nomor)
-        if (role === 'siswa') {
-          const kelasPattern = /^(X|XI|XII)-(IPA|IPS|Bahasa)-(\d+)$/;
-          if (!kelasPattern.test(kelas)) {
-            results.failed++;
-            results.errors.push({
-              username,
-              error: `Format kelas tidak valid: "${kelas}". Gunakan format: tingkat-jurusan-nomor (contoh: XII-IPA-1)`
-            });
-            continue;
-          }
-
-          // Validate consistency: kelas must match tingkat and jurusan
-          const [, kelasTingkat, kelasJurusan] = kelas.match(kelasPattern);
-          
-          if (kelasTingkat !== tingkat) {
-            results.failed++;
-            results.errors.push({
-              username,
-              error: `Tingkat pada kelas (${kelasTingkat}) tidak sesuai dengan tingkat (${tingkat})`
-            });
-            continue;
-          }
-
-          if (kelasJurusan !== jurusan) {
-            results.failed++;
-            results.errors.push({
-              username,
-              error: `Jurusan pada kelas (${kelasJurusan}) tidak sesuai dengan jurusan (${jurusan})`
-            });
-            continue;
-          }
-        }
-
-        // Check if username already exists
-        const existingUser = await prisma.user.findUnique({
-          where: { username },
-        });
-
-        if (existingUser) {
-          results.failed++;
-          results.errors.push({ username, error: 'Username sudah digunakan' });
-          continue;
-        }
-
-        // Hash password
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        // Create user with transaction
-        await prisma.$transaction(async tx => {
-          const newUser = await tx.user.create({
-            data: {
-              username,
-              password: hashedPassword,
-              role,
-            },
-          });
-
-          // Create role-specific profile
-          if (role === 'siswa') {
-            await tx.siswa.create({
-              data: {
-                userId: newUser.id,
-                nama_lengkap: nama,
-                kelas,
-                tingkat,
-                jurusan,
-              },
-            });
-          } else if (role === 'guru') {
-            await tx.guru.create({
-              data: {
-                userId: newUser.id,
-                nama_lengkap: nama,
-              },
-            });
-          } else if (role === 'admin') {
-            await tx.admin.create({
-              data: {
-                userId: newUser.id,
-                nama_lengkap: nama,
-              },
-            });
-          }
-        });
-
-        results.success++;
-      } catch (error) {
-        results.failed++;
+  for (const userData of users) {
+    try {
+      if (!userData.username || !userData.password || !userData.role || !userData.full_name) {
+        results.failed.push(userData.username || 'unknown');
         results.errors.push({
-          username: userData.username,
-          error: error.message,
+          username: userData.username || 'unknown',
+          error: 'username, password, role, dan full_name wajib diisi',
         });
+        continue;
       }
-    }
 
-    res.status(200).json({
-      message: 'Batch import selesai',
-      ...results,
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+      const user = await createUserWithProfile(userData);
+      results.success.push({ username: user.username, id: user.id });
+    } catch (error) {
+      results.failed.push(userData.username || 'unknown');
+      results.errors.push({
+        username: userData.username || 'unknown',
+        error: error.message || 'Gagal membuat user',
+      });
+    }
   }
-};
+
+  res.status(201).json({
+    message: `${results.success.length} user berhasil dibuat, ${results.failed.length} gagal`,
+    total: users.length,
+    success: results.success.length,
+    failed: results.failed.length,
+    successDetails: results.success,
+    failedDetails: results.failed,
+    errors: results.errors,
+  });
+});
+
+// POST /api/users/batch-delete - Delete multiple users at once (e.g. graduated students)
+const batchDeleteUsers = asyncHandler(async (req, res) => {
+  const { user_ids, grade_level, major, classroom } = req.body;
+
+  // Mode 1: Delete by explicit user IDs
+  // Mode 2: Delete by filter (grade_level, major, classroom) — for graduating classes
+  let targetIds = [];
+
+  if (user_ids && Array.isArray(user_ids) && user_ids.length > 0) {
+    targetIds = user_ids.map(id => parseInt(id)).filter(id => !isNaN(id));
+  } else if (grade_level) {
+    // Find all students matching filter
+    const where = { grade_level };
+    if (major) where.major = major;
+    if (classroom) where.classroom = classroom;
+
+    const students = await prisma.student.findMany({
+      where,
+      select: { user_id: true },
+    });
+    targetIds = students.map(s => s.user_id);
+  } else {
+    throw new AppError('Harus menyertakan user_ids atau grade_level untuk batch delete', 400);
+  }
+
+  if (targetIds.length === 0) {
+    throw new AppError('Tidak ada user yang cocok dengan filter', 404);
+  }
+
+  // Safety checks: exclude self and super admins
+  const protectedUsers = await prisma.user.findMany({
+    where: {
+      id: { in: targetIds },
+      OR: [
+        { is_super_admin: true },
+        { id: req.user.id },
+      ],
+    },
+    select: { id: true, username: true },
+  });
+
+  const protectedIds = new Set(protectedUsers.map(u => u.id));
+  const deletableIds = targetIds.filter(id => !protectedIds.has(id));
+
+  if (deletableIds.length === 0) {
+    throw new AppError('Semua user yang dipilih adalah super admin atau akun sendiri, tidak dapat dihapus', 403);
+  }
+
+  // Delete in transaction (cascade handles relations)
+  const deleted = await prisma.user.deleteMany({
+    where: { id: { in: deletableIds } },
+  });
+
+  // Activity log
+  await activityLogService.createLog({
+    user_id: req.user.id,
+    activity_type: 'BATCH_DELETE_USERS',
+    description: `Admin batch-deleted ${deleted.count} users${grade_level ? ` (grade: ${grade_level})` : ''}`,
+    ip_address: activityLogService.getIpAddress(req),
+    user_agent: activityLogService.getUserAgent(req),
+    metadata: {
+      deleted_count: deleted.count,
+      deleted_ids: deletableIds,
+      skipped: protectedUsers.map(u => u.username),
+      filter: { grade_level, major, classroom },
+    },
+  });
+
+  res.json({
+    message: `${deleted.count} user berhasil dihapus`,
+    deleted_count: deleted.count,
+    skipped_count: protectedIds.size,
+    skipped_users: protectedUsers.map(u => u.username),
+  });
+});
 
 module.exports = {
   getAllUsers,
+  getAllAdmins,
+  getAllTeachers,
+  getAllStudents,
+  countUsersByRole,
+  getUserDetail,
+  updateUser,
   createUser,
-  batchCreateUsers,
   updateUserRole,
   toggleUserStatus,
   deleteUser,
-  nilaiJawaban,
-  finalisasiNilai
+  batchDeleteUsers,
+  scoreAnswer,
+  finalizeScore,
+  batchCreateUsers,
 };

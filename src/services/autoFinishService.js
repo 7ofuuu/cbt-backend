@@ -1,202 +1,141 @@
 // src/services/autoFinishService.js
 const prisma = require('../config/db');
 const activityLogService = require('./activityLogService');
+const { calculateScore } = require('./scoreService');
 
 /**
  * Check and auto-finish expired ujian sessions
  * This should be called periodically (every minute)
+ * OPTIMIZED: Filters by exam end_date at DB level instead of loading ALL sessions
  */
 const checkAndFinishExpiredSessions = async () => {
   try {
-    console.log('🔍 Checking for expired ujian sessions...');
+    const now = new Date();
 
-    // Get all peserta ujian yang sedang dikerjakan
-    const activeSessions = await prisma.peserta_ujians.findMany({
+    // Only fetch sessions whose exam has ended OR whose individual timer has expired
+    const activeSessions = await prisma.examParticipant.findMany({
       where: {
-        status_ujian: 'SEDANG_DIKERJAKAN',
-        waktu_mulai: { not: null },
+        exam_status: 'IN_PROGRESS',
+        start_time: { not: null },
+        // Exam window ended (catch-all)
+        exam: {
+          end_date: { lt: now },
+        },
       },
       include: {
-        ujians: true,
-        siswas: {
-          include: {
-            user: true,
-          },
+        exam: {
+          include: { exam_questions: true },
         },
-        jawabans: {
+        student: {
+          include: { user: true },
+        },
+        answers: {
           include: {
-            soals: {
-              include: {
-                opsi_jawabans: true,
-              },
+            question: {
+              include: { answer_options: true },
             },
           },
         },
       },
     });
 
+    // Also fetch sessions where per-student timer expired (start_time + duration < now)
+    // but exam window hasn't closed yet. Prisma can't do date arithmetic in WHERE,
+    // so we fetch ONGOING exam sessions and filter in-memory.
+    const perStudentExpired = await prisma.examParticipant.findMany({
+      where: {
+        exam_status: 'IN_PROGRESS',
+        start_time: { not: null },
+        exam: {
+          exam_status: 'ONGOING',
+          end_date: { gte: now }, // exam window still open
+        },
+      },
+      include: {
+        exam: {
+          include: { exam_questions: true },
+        },
+        student: {
+          include: { user: true },
+        },
+        answers: {
+          include: {
+            question: {
+              include: { answer_options: true },
+            },
+          },
+        },
+      },
+    });
+
+    // Filter: start_time + duration_minutes < now
+    const timedOutSessions = perStudentExpired.filter(ep => {
+      const deadline = new Date(ep.start_time.getTime() + ep.exam.duration_minutes * 60000);
+      return deadline < now;
+    });
+
+    // Combine both sets (no duplicates since conditions are mutually exclusive)
+    const allExpired = [...activeSessions, ...timedOutSessions];
+
     let finishedCount = 0;
 
-    for (const pesertaUjian of activeSessions) {
-      const now = new Date();
-      const waktuMulai = new Date(pesertaUjian.waktu_mulai);
-      const durasiMs = pesertaUjian.ujians.durasi_menit * 60 * 1000;
-      const deadlineByDuration = new Date(waktuMulai.getTime() + durasiMs);
+    for (const examParticipant of allExpired) {
+      try {
+        // Calculate score using centralized service
+        const { finalScore, hasEssay, allEssayGraded } = calculateScore(
+          examParticipant.exam.exam_questions,
+          examParticipant.answers
+        );
 
-      // Check deadline (either ujian.tanggal_selesai or waktu_mulai + durasi)
-      const deadline = pesertaUjian.ujians.tanggal_selesai ? new Date(pesertaUjian.ujians.tanggal_selesai) : deadlineByDuration;
+        const newStatus = !hasEssay || allEssayGraded ? 'GRADED' : 'COMPLETED';
 
-      // If current time exceeds deadline, auto-finish
-      if (now > deadline) {
-        console.log(`⏰ Auto-finishing expired session for peserta_ujian_id: ${pesertaUjian.peserta_ujian_id}`);
-
-        try {
-          // Calculate score
-          const { nilaiAkhir, hasEssay } = await calculateScore(pesertaUjian);
-
-          // Update status to SELESAI
-          await prisma.peserta_ujians.update({
-            where: { peserta_ujian_id: pesertaUjian.peserta_ujian_id },
-            data: {
-              status_ujian: 'SELESAI',
-              waktu_selesai: now,
-            },
+        // Atomic update: status + result in transaction
+        await prisma.$transaction(async (tx) => {
+          await tx.examParticipant.update({
+            where: { exam_participant_id: examParticipant.exam_participant_id },
+            data: { exam_status: newStatus, end_time: now },
           });
 
-          // Create hasil ujian
-          await prisma.hasil_ujians.create({
-            data: {
-              peserta_ujian_id: pesertaUjian.peserta_ujian_id,
-              nilai_akhir: nilaiAkhir,
-              tanggal_submit: now,
+          await tx.examResult.upsert({
+            where: { exam_participant_id: examParticipant.exam_participant_id },
+            update: { final_score: finalScore, submit_date: now },
+            create: {
+              exam_participant_id: examParticipant.exam_participant_id,
+              final_score: finalScore,
+              submit_date: now,
             },
           });
+        });
 
-          // Update status to DINILAI if no essay
-          if (!hasEssay) {
-            await prisma.peserta_ujians.update({
-              where: { peserta_ujian_id: pesertaUjian.peserta_ujian_id },
-              data: { status_ujian: 'DINILAI' },
-            });
-          }
+        // Log activity
+        await activityLogService.createLog({
+          user_id: examParticipant.student.user_id,
+          exam_participant_id: examParticipant.exam_participant_id,
+          activity_type: 'AUTO_FINISH_UJIAN',
+          description: `Ujian otomatis diselesaikan karena waktu habis - ${examParticipant.exam.exam_name}`,
+          metadata: {
+            exam_id: examParticipant.exam_id,
+            final_score: finalScore,
+            start_time: examParticipant.start_time,
+            end_time: now,
+          },
+        });
 
-          // Log activity
-          await activityLogService.createLog({
-            user_id: pesertaUjian.siswas.userId,
-            peserta_ujian_id: pesertaUjian.peserta_ujian_id,
-            activity_type: 'AUTO_FINISH_UJIAN',
-            description: `Ujian otomatis diselesaikan karena waktu habis - ${pesertaUjian.ujians.nama_ujian}`,
-            metadata: {
-              ujian_id: pesertaUjian.ujian_id,
-              nilai_akhir: nilaiAkhir,
-              waktu_mulai: pesertaUjian.waktu_mulai,
-              waktu_selesai: now,
-              deadline: deadline,
-            },
-          });
-
-          finishedCount++;
-          console.log(`✅ Auto-finished: ${pesertaUjian.siswas.nama_lengkap} - Nilai: ${nilaiAkhir.toFixed(2)}`);
-        } catch (error) {
-          console.error(`❌ Error auto-finishing peserta_ujian_id ${pesertaUjian.peserta_ujian_id}:`, error);
-        }
+        finishedCount++;
+      } catch (error) {
+        console.error(`[AutoFinish] Failed to auto-finish participant ${examParticipant.exam_participant_id}:`, error.message);
       }
     }
 
     if (finishedCount > 0) {
-      console.log(`✅ Auto-finished ${finishedCount} expired session(s)`);
-    } else {
-      console.log(`✓ No expired sessions found`);
+      console.info(`[AutoFinish] Auto-finished ${finishedCount} participant(s)`);
     }
 
     return finishedCount;
   } catch (error) {
-    console.error('❌ Error in checkAndFinishExpiredSessions:', error);
+    console.error('[AutoFinish] Service error:', error.message);
     return 0;
   }
-};
-
-/**
- * Calculate score for peserta ujian
- */
-const calculateScore = async pesertaUjian => {
-  let totalNilai = 0;
-  let totalBobot = 0;
-  let hasEssay = false;
-
-  // Get soal_ujians for this ujian
-  const soalUjians = await prisma.soal_ujians.findMany({
-    where: { ujian_id: pesertaUjian.ujian_id },
-    include: {
-      soals: {
-        include: {
-          opsi_jawabans: true,
-        },
-      },
-    },
-  });
-
-  for (const soalUjian of soalUjians) {
-    totalBobot += soalUjian.bobot_nilai;
-
-    const jawaban = pesertaUjian.jawabans.find(j => j.soal_id === soalUjian.soal_id);
-
-    if (jawaban && jawaban.soals) {
-      const soal = jawaban.soals;
-
-      // Check essay questions
-      if (soal.tipe_soal === 'ESSAY') {
-        hasEssay = true;
-        // If essay has nilai_manual, use it
-        if (jawaban.nilai_manual !== null) {
-          const nilaiDidapat = (jawaban.nilai_manual / 100) * soalUjian.bobot_nilai;
-          totalNilai += nilaiDidapat;
-        }
-        continue;
-      }
-
-      // Check pilihan ganda (single or multiple)
-      if (soal.tipe_soal === 'PILIHAN_GANDA_SINGLE') {
-        const opsiBenar = soal.opsi_jawabans.find(o => o.is_benar);
-
-        if (opsiBenar && jawaban.jawaban_pg_opsi_ids) {
-          try {
-            const jawabanIds = JSON.parse(jawaban.jawaban_pg_opsi_ids);
-            const jawabanOpsiId = parseInt(jawabanIds[0]);
-            if (jawabanOpsiId === opsiBenar.opsi_id) {
-              totalNilai += soalUjian.bobot_nilai;
-            }
-          } catch (e) {
-            console.error('Error parsing jawaban_pg_opsi_ids:', e);
-          }
-        }
-      } else if (soal.tipe_soal === 'PILIHAN_GANDA_MULTIPLE') {
-        const opsiBenarIds = soal.opsi_jawabans
-          .filter(o => o.is_benar)
-          .map(o => o.opsi_id)
-          .sort();
-
-        if (jawaban.jawaban_pg_opsi_ids) {
-          try {
-            const jawabanIds = JSON.parse(jawaban.jawaban_pg_opsi_ids)
-              .map(id => parseInt(id))
-              .sort();
-
-            const isCorrect = JSON.stringify(opsiBenarIds) === JSON.stringify(jawabanIds);
-            if (isCorrect) {
-              totalNilai += soalUjian.bobot_nilai;
-            }
-          } catch (e) {
-            console.error('Error parsing jawaban_pg_opsi_ids:', e);
-          }
-        }
-      }
-    }
-  }
-
-  const nilaiAkhir = totalBobot > 0 ? (totalNilai / totalBobot) * 100 : 0;
-
-  return { nilaiAkhir, hasEssay, totalNilai, totalBobot };
 };
 
 /**
@@ -204,19 +143,16 @@ const calculateScore = async pesertaUjian => {
  * Runs every minute
  */
 const startAutoFinishScheduler = () => {
-  console.log('🚀 Starting auto-finish scheduler...');
-  
   // Run immediately on start
   checkAndFinishExpiredSessions();
-  
+
   // Then run every 60 seconds
-  setInterval(checkAndFinishExpiredSessions, 60000);
-  
-  console.log('✅ Auto-finish scheduler started (running every 60 seconds)');
+  const intervalId = setInterval(checkAndFinishExpiredSessions, 60000);
+
+  return intervalId;
 };
 
 module.exports = {
   checkAndFinishExpiredSessions,
-  calculateScore,
-  startAutoFinishScheduler
+  startAutoFinishScheduler,
 };

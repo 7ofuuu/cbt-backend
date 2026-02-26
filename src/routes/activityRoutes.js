@@ -10,15 +10,15 @@ const {
   unblockParticipant
 } = require('../controllers/activityController');
 
-// Semua route hanya untuk Admin
+// All routes for Admin only
 router.use(verifyToken, checkRole('admin'));
 
 // Activities routes
-router.get('/', getAllActivities);                                  // Get all activities/exams with filters
-router.get('/:ujianId/participants', getExamParticipants);          // Get participants of specific exam
-router.get('/participant/:pesertaUjianId', getParticipantDetail);   // Get participant detail
-router.post('/:pesertaUjianId/block', blockParticipant);            // Block participant from exam
-router.post('/:pesertaUjianId/generate-unlock', generateUnlockCode);// Generate unlock code for participant
-router.post('/:pesertaUjianId/unblock', unblockParticipant);        // Unblock participant
+router.get('/', getAllActivities);                                          // Get all activities/exams with filters
+router.get('/:examId/participants', getExamParticipants);                   // Get participants of specific exam
+router.get('/participant/:examParticipantId', getParticipantDetail);         // Get participant detail
+router.post('/:examParticipantId/block', blockParticipant);                 // Block participant from exam
+router.post('/:examParticipantId/generate-unlock', generateUnlockCode);     // Generate unlock code for participant
+router.post('/:examParticipantId/unblock', unblockParticipant);             // Unblock participant
 
 module.exports = router;
