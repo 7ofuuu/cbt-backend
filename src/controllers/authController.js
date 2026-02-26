@@ -1,219 +1,223 @@
+/**
+ * Auth Controller - Refactored
+ * Uses asyncHandler, AppError, and userService for user creation.
+ */
 const prisma = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { asyncHandler, AppError } = require('../utils/asyncHandler');
+const { createUserWithProfile, SALT_ROUNDS } = require('../services/userService');
 const activityLogService = require('../services/activityLogService');
 
-const register = async (req, res) => {
-  const { username, password, role, nama, kelas, tingkat, jurusan } = req.body;
+// POST /api/auth/register
+const register = asyncHandler(async (req, res) => {
+  const { username, password, role, full_name, classroom, grade_level, major, nisn, nip } = req.body;
 
-  try {
-    const hashedPassword = await bcrypt.hash(password, 10);
+  const user = await createUserWithProfile({
+    username, password, role, full_name, classroom, grade_level, major, nisn, nip,
+  });
 
-    const result = await prisma.$transaction(async (tx) => {
-      const newUser = await tx.user.create({
-        data: {
-          username,
-          password: hashedPassword,
-          role,
-        },
-      });
+  res.status(201).json({ message: 'User berhasil didaftarkan', userId: user.id });
+});
 
-      if (role === 'siswa') {
-        await tx.siswa.create({
-          data: {
-            userId: newUser.id,
-            nama_lengkap: nama,
-            kelas, tingkat, jurusan
-          }
-        });
-      } else if (role === 'guru') {
-        await tx.guru.create({
-          data: {
-            userId: newUser.id,
-            nama_lengkap: nama
-          }
-        });
-      } else if (role === 'admin') {
-        await tx.admin.create({
-          data: {
-            userId: newUser.id,
-            nama_lengkap: nama
-          }
-        });
-      }
-
-      return newUser;
-    });
-
-    res.status(201).json({ message: 'User berhasil didaftarkan', userId: result.id });
-
-  } catch (error) {
-    if (error.code === 'P2002') {
-        return res.status(400).json({ error: 'Username sudah digunakan' });
-    }
-    res.status(500).json({ error: error.message });
-  }
-};
-
-const login = async (req, res) => {
+// POST /api/auth/login
+const login = asyncHandler(async (req, res) => {
   const { username, password } = req.body;
 
-  try {
-    const user = await prisma.user.findUnique({
-      where: { username },
-      include: {
-        siswa: true,
-        guru: true,
-        admin: true
-      }
-    });
+  const user = await prisma.user.findUnique({
+    where: { username },
+    include: { student: true, teacher: true, admin: true },
+  });
 
-    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
-
-    const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) return res.status(401).json({ error: 'Password salah' });
-
-    if (!user.status_aktif) return res.status(403).json({ error: 'Akun dinonaktifkan' });
-
-    let profileData = null;
-    if (user.role === 'siswa') profileData = user.siswa;
-    else if (user.role === 'guru') profileData = user.guru;
-    else if (user.role === 'admin') profileData = user.admin;
-
-    const token = jwt.sign(
-      { id: user.id, role: user.role }, 
-      process.env.JWT_SECRET, 
-      { expiresIn: '1d' }
-    );
-
-    // Log activity
-    await activityLogService.createLog({
-      user_id: user.id,
-      activity_type: 'LOGIN',
-      description: `User ${username} (${user.role}) berhasil login`,
-      ip_address: activityLogService.getIpAddress(req),
-      user_agent: activityLogService.getUserAgent(req),
-      metadata: {
-        username,
-        role: user.role
-      }
-    });
-
-    res.json({
-      message: 'Login berhasil',
-      token,
-      user: {
-        id: user.id,
-        role: user.role,
-        profile: profileData // Data nama, kelas, dll terkirim disini
-      }
-    });
-
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  if (!user) {
+    // Timing attack mitigation - valid 60-char bcrypt hash
+    await bcrypt.compare(password, '$2a$12$LJ3m4ys3Lf0Xg0V7R0j5dOJvGMmS76N0ATMMJ8EfEDMaq7SSH3/6i');
+    throw new AppError('Username atau password salah', 401);
   }
-};
 
-// Get current authenticated user profile
-const me = async (req, res) => {
-  try {
-    const userId = req.user.id;
+  const validPassword = await bcrypt.compare(password, user.password);
+  if (!validPassword) throw new AppError('Username atau password salah', 401);
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { siswa: true, guru: true, admin: true },
-    });
+  if (!user.is_active) throw new AppError('Akun dinonaktifkan', 403);
 
-    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
+  let profileData = null;
+  if (user.role === 'student') profileData = user.student;
+  else if (user.role === 'teacher') profileData = user.teacher;
+  else if (user.role === 'admin') profileData = user.admin;
 
-    let profileData = null;
-    if (user.role === 'siswa') profileData = user.siswa;
-    else if (user.role === 'guru') profileData = user.guru;
-    else if (user.role === 'admin') profileData = user.admin;
+  const token = jwt.sign(
+    { id: user.id, role: user.role, is_super_admin: user.is_super_admin || false },
+    process.env.JWT_SECRET,
+    { expiresIn: '1d' }
+  );
 
-    res.json({
-      message: 'Profile fetched',
-      token: '',
-      user: {
-        id: user.id,
-        role: user.role,
-        profile: profileData,
+  await activityLogService.createLog({
+    user_id: user.id,
+    activity_type: 'LOGIN',
+    description: `User ${username} (${user.role}) berhasil login`,
+    ip_address: activityLogService.getIpAddress(req),
+    user_agent: activityLogService.getUserAgent(req),
+    metadata: { username, role: user.role },
+  });
+
+  res.json({
+    message: 'Login berhasil',
+    token,
+    user: {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      is_super_admin: user.is_super_admin || false,
+      profile: profileData,
+    },
+  });
+});
+
+// GET /api/auth/me
+const me = asyncHandler(async (req, res) => {
+  const user = await prisma.user.findUnique({
+    where: { id: req.user.id },
+    include: { student: true, teacher: true, admin: true },
+  });
+
+  if (!user) throw new AppError('User tidak ditemukan', 404);
+
+  let profileData = null;
+  if (user.role === 'student') profileData = user.student;
+  else if (user.role === 'teacher') profileData = user.teacher;
+  else if (user.role === 'admin') profileData = user.admin;
+
+  res.json({
+    message: 'Profile fetched',
+    user: {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      is_super_admin: user.is_super_admin || false,
+      profile: profileData,
+    },
+  });
+});
+
+// PATCH /api/auth/profile
+const updateProfile = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const { full_name, classroom, grade_level, major, nisn, nip } = req.body;
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError('User tidak ditemukan', 404);
+
+  if (user.role === 'student') {
+    const student = await prisma.student.findUnique({ where: { user_id: userId } });
+    if (!student) throw new AppError('Profil siswa tidak ditemukan', 404);
+
+    // B2: Students cannot modify grade_level, major, or classroom (admin-only fields)
+    await prisma.student.update({
+      where: { user_id: userId },
+      data: {
+        ...(full_name !== undefined && { full_name }),
+        ...(nisn !== undefined && { nisn }),
       },
     });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
+  } else if (user.role === 'teacher') {
+    const teacher = await prisma.teacher.findUnique({ where: { user_id: userId } });
+    if (!teacher) throw new AppError('Profil guru tidak ditemukan', 404);
 
-// Update profile for authenticated user
-const updateProfile = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { nama_lengkap, kelas, tingkat, jurusan } = req.body;
-
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
-
-    let updatedProfile = null;
-
-    if (user.role === 'siswa') {
-      const siswa = await prisma.siswa.findUnique({ where: { userId } });
-      if (!siswa) return res.status(404).json({ error: 'Profil siswa tidak ditemukan' });
-
-      updatedProfile = await prisma.siswa.update({
-        where: { userId },
-        data: {
-          ...(nama_lengkap !== undefined && { nama_lengkap }),
-          ...(kelas !== undefined && { kelas }),
-          ...(tingkat !== undefined && { tingkat }),
-          ...(jurusan !== undefined && { jurusan }),
-        },
-      });
-    } else if (user.role === 'guru') {
-      const guru = await prisma.guru.findUnique({ where: { userId } });
-      if (!guru) return res.status(404).json({ error: 'Profil guru tidak ditemukan' });
-
-      updatedProfile = await prisma.guru.update({
-        where: { userId },
-        data: {
-          ...(nama_lengkap !== undefined && { nama_lengkap }),
-        },
-      });
-    } else if (user.role === 'admin') {
-      const admin = await prisma.admin.findUnique({ where: { userId } });
-      if (!admin) return res.status(404).json({ error: 'Profil admin tidak ditemukan' });
-
-      updatedProfile = await prisma.admin.update({
-        where: { userId },
-        data: {
-          ...(nama_lengkap !== undefined && { nama_lengkap }),
-        },
-      });
-    }
-
-    // Return updated user object similar to login response
-    const freshUser = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { siswa: true, guru: true, admin: true },
-    });
-
-    let profileData = null;
-    if (freshUser.role === 'siswa') profileData = freshUser.siswa;
-    else if (freshUser.role === 'guru') profileData = freshUser.guru;
-    else if (freshUser.role === 'admin') profileData = freshUser.admin;
-
-    res.json({
-      message: 'Profile updated',
-      token: '',
-      user: {
-        id: freshUser.id,
-        role: freshUser.role,
-        profile: profileData,
+    await prisma.teacher.update({
+      where: { user_id: userId },
+      data: {
+        ...(full_name !== undefined && { full_name }),
+        ...(nip !== undefined && { nip }),
       },
     });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
+  } else if (user.role === 'admin') {
+    const admin = await prisma.admin.findUnique({ where: { user_id: userId } });
+    if (!admin) throw new AppError('Profil admin tidak ditemukan', 404);
 
-module.exports = { register, login, me, updateProfile };
+    await prisma.admin.update({
+      where: { user_id: userId },
+      data: {
+        ...(full_name !== undefined && { full_name }),
+      },
+    });
+  }
+
+  const freshUser = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { student: true, teacher: true, admin: true },
+  });
+
+  let profileData = null;
+  if (freshUser.role === 'student') profileData = freshUser.student;
+  else if (freshUser.role === 'teacher') profileData = freshUser.teacher;
+  else if (freshUser.role === 'admin') profileData = freshUser.admin;
+
+  res.json({
+    message: 'Profile updated',
+    user: {
+      id: freshUser.id,
+      role: freshUser.role,
+      is_super_admin: freshUser.is_super_admin || false,
+      profile: profileData,
+    },
+  });
+});
+
+// PATCH /api/auth/change-password
+const changePassword = asyncHandler(async (req, res) => {
+  const { current_password, new_password } = req.body;
+
+  if (!current_password || !new_password) {
+    throw new AppError('Password saat ini dan password baru wajib diisi', 400);
+  }
+
+  if (new_password.length < 6) {
+    throw new AppError('Password baru minimal 6 karakter', 400);
+  }
+
+  if (current_password === new_password) {
+    throw new AppError('Password baru tidak boleh sama dengan password saat ini', 400);
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+  if (!user) throw new AppError('User tidak ditemukan', 404);
+
+  const validPassword = await bcrypt.compare(current_password, user.password);
+  if (!validPassword) throw new AppError('Password saat ini salah', 401);
+
+  const hashedPassword = await bcrypt.hash(new_password, SALT_ROUNDS);
+  await prisma.user.update({
+    where: { id: req.user.id },
+    data: { password: hashedPassword },
+  });
+
+  await activityLogService.createLog({
+    user_id: req.user.id,
+    activity_type: 'CHANGE_PASSWORD',
+    description: `User ${user.username} (${user.role}) berhasil mengubah password`,
+    ip_address: activityLogService.getIpAddress(req),
+    user_agent: activityLogService.getUserAgent(req),
+    metadata: { username: user.username, role: user.role },
+  });
+
+  res.json({ message: 'Password berhasil diubah' });
+});
+
+// POST /api/auth/logout
+const logout = asyncHandler(async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { username: true } });
+  const username = user?.username || `ID:${req.user.id}`;
+
+  await activityLogService.createLog({
+    user_id: req.user.id,
+    activity_type: 'LOGOUT',
+    description: `User ${username} (${req.user.role}) berhasil logout`,
+    ip_address: activityLogService.getIpAddress(req),
+    user_agent: activityLogService.getUserAgent(req),
+    metadata: { username, role: req.user.role },
+  });
+
+  res.json({ message: 'Logout berhasil' });
+});
+
+module.exports = { register, login, me, updateProfile, changePassword, logout };

@@ -5,14 +5,16 @@ const { verifyToken, checkRole } = require('../middlewares/validationMiddleware'
 const {
   getActivityLogs,
   getLogsByUser,
-  getLogsByPesertaUjian,
-  getLogsByType
+  getLogsByExamParticipant,
+  getLogsByType,
+  getActiveUsers
 } = require('../controllers/activityLogController');
 
 // Admin/Guru can view all logs
-router.get('/', verifyToken, checkRole(['admin', 'guru']), getActivityLogs);
-router.get('/user/:userId', verifyToken, checkRole(['admin', 'guru']), getLogsByUser);
-router.get('/peserta-ujian/:pesertaUjianId', verifyToken, checkRole(['admin', 'guru']), getLogsByPesertaUjian);
-router.get('/type/:activityType', verifyToken, checkRole(['admin', 'guru']), getLogsByType);
+router.get('/', verifyToken, checkRole(['admin', 'teacher']), getActivityLogs);
+router.get('/active-users', verifyToken, checkRole(['admin', 'teacher']), getActiveUsers);
+router.get('/user/:userId', verifyToken, checkRole(['admin', 'teacher']), getLogsByUser);
+router.get('/exam-participant/:examParticipantId', verifyToken, checkRole(['admin', 'teacher']), getLogsByExamParticipant);
+router.get('/type/:activityType', verifyToken, checkRole(['admin', 'teacher']), getLogsByType);
 
 module.exports = router;

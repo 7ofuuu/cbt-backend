@@ -19,15 +19,16 @@ async function main() {
   // Clear existing data
   console.log('🗑️  Clearing existing data...');
   await prisma.activityLog.deleteMany();
-  await prisma.hasil_ujians.deleteMany();
-  await prisma.jawabans.deleteMany();
-  await prisma.soal_ujians.deleteMany();
-  await prisma.peserta_ujians.deleteMany();
-  await prisma.opsi_jawabans.deleteMany();
-  await prisma.soals.deleteMany();
-  await prisma.ujians.deleteMany();
-  await prisma.siswa.deleteMany();
-  await prisma.guru.deleteMany();
+  await prisma.examResult.deleteMany();
+  await prisma.answer.deleteMany();
+  await prisma.examQuestion.deleteMany();
+  await prisma.examParticipant.deleteMany();
+  await prisma.answerOption.deleteMany();
+  await prisma.question.deleteMany();
+  await prisma.questionBank.deleteMany();
+  await prisma.exam.deleteMany();
+  await prisma.student.deleteMany();
+  await prisma.teacher.deleteMany();
   await prisma.admin.deleteMany();
   await prisma.user.deleteMany();
   console.log('✅ Data cleared\n');
@@ -42,8 +43,9 @@ async function main() {
         username: 'admin1',
         password: hashedPassword,
         role: 'admin',
-        status_aktif: true,
-        admin: { create: { nama_lengkap: 'Administrator Utama' } },
+        is_active: true,
+        is_super_admin: true,
+        admin: { create: { full_name: 'Super Administrator' } },
       },
       include: { admin: true },
     }),
@@ -52,8 +54,8 @@ async function main() {
         username: 'admin2',
         password: hashedPassword,
         role: 'admin',
-        status_aktif: true,
-        admin: { create: { nama_lengkap: 'Administrator Sekunder' } },
+        is_active: true,
+        admin: { create: { full_name: 'Administrator Sekunder' } },
       },
       include: { admin: true },
     }),
@@ -62,420 +64,451 @@ async function main() {
         username: 'admin_nonaktif',
         password: hashedPassword,
         role: 'admin',
-        status_aktif: false,
-        admin: { create: { nama_lengkap: 'Administrator Nonaktif' } },
+        is_active: false,
+        admin: { create: { full_name: 'Administrator Nonaktif' } },
       },
       include: { admin: true },
     }),
   ]);
-  console.log(`✅ Created ${admins.length} admins (2 aktif, 1 nonaktif)\n`);
+  console.log(`✅ Created ${admins.length} admins (2 active, 1 inactive)\n`);
 
-  // ==================== CREATE GURUS ====================
-  console.log('👨‍🏫 Creating gurus...');
-  const guruData = [
-    { username: 'guru_mtk', nama: 'Budi Santoso, S.Pd', aktif: true },
-    { username: 'guru_fisika', nama: 'Ani Wijaya, M.Pd', aktif: true },
-    { username: 'guru_kimia', nama: 'Dedi Suryanto, S.Si', aktif: true },
-    { username: 'guru_biologi', nama: 'Rina Kusuma, S.Pd', aktif: true },
-    { username: 'guru_bahasa', nama: 'Siti Nurhaliza, M.Pd', aktif: true },
-    { username: 'guru_sejarah', nama: 'Ahmad Fauzi, S.Pd', aktif: true },
-    { username: 'guru_ekonomi', nama: 'Dewi Lestari, M.Pd', aktif: true },
-    { username: 'guru_nonaktif', nama: 'Guru Nonaktif, S.Pd', aktif: false },
+  // ==================== CREATE TEACHERS ====================
+  console.log('👨‍🏫 Creating teachers...');
+  const teacherData = [
+    { username: 'guru_mtk', nama: 'Budi Santoso, S.Pd', active: true, nip: '198501012010011001' },
+    { username: 'guru_fisika', nama: 'Ani Wijaya, M.Pd', active: true, nip: '198602022011012002' },
+    { username: 'guru_kimia', nama: 'Dedi Suryanto, S.Si', active: true, nip: '198703032012011003' },
+    { username: 'guru_biologi', nama: 'Rina Kusuma, S.Pd', active: true, nip: '198804042013012004' },
+    { username: 'guru_bahasa', nama: 'Siti Nurhaliza, M.Pd', active: true, nip: '198905052014012005' },
+    { username: 'guru_sejarah', nama: 'Ahmad Fauzi, S.Pd', active: true, nip: '199006062015011006' },
+    { username: 'guru_ekonomi', nama: 'Dewi Lestari, M.Pd', active: true, nip: '199107072016012007' },
+    { username: 'guru_nonaktif', nama: 'Guru Nonaktif, S.Pd', active: false, nip: '199208082017011008' },
   ];
 
-  const gurus = [];
-  for (const guru of guruData) {
+  const teachers = [];
+  for (const teacherItem of teacherData) {
     const user = await prisma.user.create({
       data: {
-        username: guru.username,
+        username: teacherItem.username,
         password: hashedPassword,
-        role: 'guru',
-        status_aktif: guru.aktif,
-        guru: { create: { nama_lengkap: guru.nama } },
+        role: 'teacher',
+        is_active: teacherItem.active,
+        teacher: { create: { full_name: teacherItem.nama, nip: teacherItem.nip } },
       },
-      include: { guru: true },
+      include: { teacher: true },
     });
-    gurus.push(user);
+    teachers.push(user);
   }
-  console.log(`✅ Created ${gurus.length} gurus (7 aktif, 1 nonaktif)\n`);
+  console.log(`✅ Created ${teachers.length} teachers (7 active, 1 inactive)\n`);
 
-  // ==================== CREATE SISWAS ====================
-  console.log('👨‍🎓 Creating siswas...');
-  const siswaData = [];
-  const jurusans = ['IPA', 'IPS', 'Bahasa'];
-  const tingkats = ['X', 'XI', 'XII'];
-  const namaDepan = ['Ahmad', 'Budi', 'Citra', 'Dian', 'Eko', 'Fitri', 'Gita', 'Hendra', 'Indah', 'Joko', 'Kartika', 'Lina', 'Maya', 'Nina', 'Omar'];
-  const namaBelakang = ['Pratama', 'Wijaya', 'Kusuma', 'Santoso', 'Putra', 'Putri', 'Saputra', 'Dewi', 'Nugroho', 'Permata'];
+  // ==================== CREATE STUDENTS ====================
+  console.log('👨‍🎓 Creating students...');
+  const studentData = [];
+  const majors = ['IPA', 'IPS', 'Bahasa'];
+  const gradeLevels = ['X', 'XI', 'XII'];
+  const firstNames = ['Ahmad', 'Budi', 'Citra', 'Dian', 'Eko', 'Fitri', 'Gita', 'Hendra', 'Indah', 'Joko', 'Kartika', 'Lina', 'Maya', 'Nina', 'Omar'];
+  const lastNames = ['Pratama', 'Wijaya', 'Kusuma', 'Santoso', 'Putra', 'Putri', 'Saputra', 'Dewi', 'Nugroho', 'Permata'];
 
-  let siswaCount = 1;
-  for (const tingkat of tingkats) {
-    for (const jurusan of jurusans) {
+  let studentCount = 1;
+  for (const gradeLevel of gradeLevels) {
+    for (const major of majors) {
       for (let i = 1; i <= 12; i++) {
-        const depan = namaDepan[Math.floor(Math.random() * namaDepan.length)];
-        const belakang = namaBelakang[Math.floor(Math.random() * namaBelakang.length)];
-        const kelasNumber = Math.ceil(i / 6);
+        const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+        const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+        const classNumber = Math.ceil(i / 6);
 
-        siswaData.push({
-          username: `siswa${siswaCount}`,
-          nama: `${depan} ${belakang}`,
-          kelas: `${tingkat}-${jurusan}-${kelasNumber}`,
-          tingkat: tingkat,
-          jurusan: jurusan,
-          aktif: siswaCount <= 100, // First 100 active, rest inactive
+        studentData.push({
+          username: `siswa${studentCount}`,
+          nama: `${firstName} ${lastName}`,
+          nisn: `00${String(studentCount).padStart(8, '0')}`,
+          classroom: `${gradeLevel}-${major}-${classNumber}`,
+          gradeLevel: gradeLevel,
+          major: major,
+          active: studentCount <= 100, // First 100 active, rest inactive
         });
-        siswaCount++;
+        studentCount++;
       }
     }
   }
 
-  const siswas = [];
-  for (const siswa of siswaData) {
+  const students = [];
+  for (const studentItem of studentData) {
     const user = await prisma.user.create({
       data: {
-        username: siswa.username,
+        username: studentItem.username,
         password: hashedPassword,
-        role: 'siswa',
-        status_aktif: siswa.aktif,
-        siswa: {
+        role: 'student',
+        is_active: studentItem.active,
+        student: {
           create: {
-            nama_lengkap: siswa.nama,
-            kelas: siswa.kelas,
-            tingkat: siswa.tingkat,
-            jurusan: siswa.jurusan,
+            full_name: studentItem.nama,
+            nisn: studentItem.nisn,
+            classroom: studentItem.classroom,
+            grade_level: studentItem.gradeLevel,
+            major: studentItem.major,
           },
         },
       },
-      include: { siswa: true },
+      include: { student: true },
     });
-    siswas.push(user);
+    students.push(user);
   }
-  console.log(`✅ Created ${siswas.length} siswas (100 aktif, ${siswas.length - 100} nonaktif)\n`);
+  console.log(`✅ Created ${students.length} students (100 active, ${students.length - 100} inactive)\n`);
 
-  // ==================== CREATE SOALS ====================
-  console.log('📝 Creating soals (PG Single, PG Multiple, Essay)...');
+  // ==================== CREATE QUESTIONS ====================
+  console.log('📝 Creating questions (Single Choice, Multiple Choice, Essay)...');
 
-  const soalTemplates = {
+  const questionTemplates = {
     Matematika: [
-      { teks: 'Berapa hasil dari 2 + 2?', opsi: ['2', '3', '4', '5', '6'], benar: [2] },
-      { teks: 'Tentukan turunan dari f(x) = 3x² + 2x - 1', opsi: ['6x + 2', '6x - 2', '3x + 2', '6x + 1', '3x - 1'], benar: [0] },
-      { teks: 'Nilai dari sin 90° adalah...', opsi: ['0', '0.5', '1', '√2/2', '√3/2'], benar: [2] },
-      { teks: 'Manakah yang merupakan bilangan prima?', opsi: ['2', '3', '4', '5', '6'], benar: [0, 1, 3] },
-      { teks: 'Jika a = 5 dan b = 3, berapa nilai dari a² - b²?', opsi: ['8', '16', '25', '34', '64'], benar: [1] },
+      { text: 'Berapa hasil dari 2 + 2?', options: ['2', '3', '4', '5', '6'], correct: [2] },
+      { text: 'Tentukan turunan dari f(x) = 3x² + 2x - 1', options: ['6x + 2', '6x - 2', '3x + 2', '6x + 1', '3x - 1'], correct: [0] },
+      { text: 'Nilai dari sin 90° adalah...', options: ['0', '0.5', '1', '√2/2', '√3/2'], correct: [2] },
+      { text: 'Manakah yang merupakan bilangan prima?', options: ['2', '3', '4', '5', '6'], correct: [0, 1, 3] },
+      { text: 'Jika a = 5 dan b = 3, berapa nilai dari a² - b²?', options: ['8', '16', '25', '34', '64'], correct: [1] },
     ],
     Fisika: [
-      { teks: 'Satuan SI untuk gaya adalah...', opsi: ['Joule', 'Newton', 'Watt', 'Pascal', 'Kelvin'], benar: [1] },
-      { teks: 'Hukum Newton I menyatakan tentang...', opsi: ['Gaya dan percepatan', 'Inersia', 'Aksi-reaksi', 'Gravitasi', 'Momentum'], benar: [1] },
-      { teks: 'Yang termasuk besaran vektor adalah...', opsi: ['Gaya', 'Kecepatan', 'Massa', 'Percepatan', 'Waktu'], benar: [0, 1, 3] },
+      { text: 'Satuan SI untuk gaya adalah...', options: ['Joule', 'Newton', 'Watt', 'Pascal', 'Kelvin'], correct: [1] },
+      { text: 'Hukum Newton I menyatakan tentang...', options: ['Gaya dan percepatan', 'Inersia', 'Aksi-reaksi', 'Gravitasi', 'Momentum'], correct: [1] },
+      { text: 'Yang termasuk besaran vektor adalah...', options: ['Gaya', 'Kecepatan', 'Massa', 'Percepatan', 'Waktu'], correct: [0, 1, 3] },
     ],
     Kimia: [
-      { teks: 'Simbol kimia untuk air adalah...', opsi: ['H₂O', 'CO₂', 'O₂', 'H₂', 'NaCl'], benar: [0] },
-      { teks: 'Jumlah proton dalam atom disebut...', opsi: ['Nomor massa', 'Nomor atom', 'Isotop', 'Ion', 'Elektron'], benar: [1] },
-      { teks: 'Yang termasuk gas mulia adalah...', opsi: ['Helium', 'Neon', 'Oksigen', 'Argon', 'Nitrogen'], benar: [0, 1, 3] },
+      { text: 'Simbol kimia untuk air adalah...', options: ['H₂O', 'CO₂', 'O₂', 'H₂', 'NaCl'], correct: [0] },
+      { text: 'Jumlah proton dalam atom disebut...', options: ['Nomor massa', 'Nomor atom', 'Isotop', 'Ion', 'Elektron'], correct: [1] },
+      { text: 'Yang termasuk gas mulia adalah...', options: ['Helium', 'Neon', 'Oksigen', 'Argon', 'Nitrogen'], correct: [0, 1, 3] },
     ],
     Biologi: [
-      { teks: 'Organel yang berfungsi sebagai pusat sel adalah...', opsi: ['Mitokondria', 'Ribosom', 'Nukleus', 'Lisosom', 'Golgi'], benar: [2] },
-      { teks: 'Proses fotosintesis terjadi di...', opsi: ['Mitokondria', 'Kloroplas', 'Nukleus', 'Ribosom', 'Vakuola'], benar: [1] },
-      { teks: 'Yang termasuk organ pencernaan adalah...', opsi: ['Lambung', 'Usus', 'Jantung', 'Hati', 'Paru-paru'], benar: [0, 1, 3] },
+      { text: 'Organel yang berfungsi sebagai pusat sel adalah...', options: ['Mitokondria', 'Ribosom', 'Nukleus', 'Lisosom', 'Golgi'], correct: [2] },
+      { text: 'Proses fotosintesis terjadi di...', options: ['Mitokondria', 'Kloroplas', 'Nukleus', 'Ribosom', 'Vakuola'], correct: [1] },
+      { text: 'Yang termasuk organ pencernaan adalah...', options: ['Lambung', 'Usus', 'Jantung', 'Hati', 'Paru-paru'], correct: [0, 1, 3] },
     ],
     'Bahasa Indonesia': [
-      { teks: 'Kata baku dari "apotek" adalah...', opsi: ['Apotik', 'Apotek', 'Apothek', 'Apotex', 'Apotec'], benar: [0] },
-      { teks: 'Kalimat yang mengandung subjek, predikat, dan objek disebut...', opsi: ['Kalimat tunggal', 'Kalimat majemuk', 'Kalimat lengkap', 'Kalimat inti', 'Kalimat sempurna'], benar: [2] },
-      { teks: 'Yang termasuk imbuhan adalah...', opsi: ['ber-', 'me-', 'di-', '-an', '-kan'], benar: [0, 1, 2, 3, 4] },
+      { text: 'Kata baku dari "apotek" adalah...', options: ['Apotik', 'Apotek', 'Apothek', 'Apotex', 'Apotec'], correct: [0] },
+      { text: 'Kalimat yang mengandung subjek, predikat, dan objek disebut...', options: ['Kalimat tunggal', 'Kalimat majemuk', 'Kalimat lengkap', 'Kalimat inti', 'Kalimat sempurna'], correct: [2] },
+      { text: 'Yang termasuk imbuhan adalah...', options: ['ber-', 'me-', 'di-', '-an', '-kan'], correct: [0, 1, 2, 3, 4] },
     ],
     Sejarah: [
-      { teks: 'Proklamasi kemerdekaan Indonesia dibacakan pada tanggal...', opsi: ['17 Agustus 1945', '17 Agustus 1944', '18 Agustus 1945', '16 Agustus 1945', '19 Agustus 1945'], benar: [0] },
-      { teks: 'Kerajaan Hindu pertama di Indonesia adalah...', opsi: ['Majapahit', 'Kutai', 'Sriwijaya', 'Mataram Kuno', 'Singasari'], benar: [1] },
+      { text: 'Proklamasi kemerdekaan Indonesia dibacakan pada tanggal...', options: ['17 Agustus 1945', '17 Agustus 1944', '18 Agustus 1945', '16 Agustus 1945', '19 Agustus 1945'], correct: [0] },
+      { text: 'Kerajaan Hindu pertama di Indonesia adalah...', options: ['Majapahit', 'Kutai', 'Sriwijaya', 'Mataram Kuno', 'Singasari'], correct: [1] },
     ],
     Ekonomi: [
-      { teks: 'Ilmu ekonomi mempelajari tentang...', opsi: ['Uang', 'Kelangkaan', 'Perdagangan', 'Produksi', 'Distribusi'], benar: [1] },
-      { teks: 'Kebutuhan primer manusia meliputi...', opsi: ['Sandang', 'Pangan', 'Papan', 'Mobil', 'Perhiasan'], benar: [0, 1, 2] },
+      { text: 'Ilmu ekonomi mempelajari tentang...', options: ['Uang', 'Kelangkaan', 'Perdagangan', 'Produksi', 'Distribusi'], correct: [1] },
+      { text: 'Kebutuhan primer manusia meliputi...', options: ['Sandang', 'Pangan', 'Papan', 'Mobil', 'Perhiasan'], correct: [0, 1, 2] },
     ],
   };
 
-  const mataPelajaranData = {
-    Matematika: { guru: gurus[0].guru.guru_id, tingkats: ['X', 'XI', 'XII'], jurusans: ['IPA', 'IPS'] },
-    Fisika: { guru: gurus[1].guru.guru_id, tingkats: ['X', 'XI', 'XII'], jurusans: ['IPA'] },
-    Kimia: { guru: gurus[2].guru.guru_id, tingkats: ['X', 'XI', 'XII'], jurusans: ['IPA'] },
-    Biologi: { guru: gurus[3].guru.guru_id, tingkats: ['X', 'XI', 'XII'], jurusans: ['IPA'] },
-    'Bahasa Indonesia': { guru: gurus[4].guru.guru_id, tingkats: ['X', 'XI', 'XII'], jurusans: ['IPA', 'IPS', 'Bahasa'] },
-    Sejarah: { guru: gurus[5].guru.guru_id, tingkats: ['X', 'XI', 'XII'], jurusans: ['IPA', 'IPS', 'Bahasa'] },
-    Ekonomi: { guru: gurus[6].guru.guru_id, tingkats: ['X', 'XI', 'XII'], jurusans: ['IPS'] },
+  const subjectData = {
+    Matematika: { teacherId: teachers[0].teacher.teacher_id, gradeLevels: ['X', 'XI', 'XII'], majors: ['IPA', 'IPS'] },
+    Fisika: { teacherId: teachers[1].teacher.teacher_id, gradeLevels: ['X', 'XI', 'XII'], majors: ['IPA'] },
+    Kimia: { teacherId: teachers[2].teacher.teacher_id, gradeLevels: ['X', 'XI', 'XII'], majors: ['IPA'] },
+    Biologi: { teacherId: teachers[3].teacher.teacher_id, gradeLevels: ['X', 'XI', 'XII'], majors: ['IPA'] },
+    'Bahasa Indonesia': { teacherId: teachers[4].teacher.teacher_id, gradeLevels: ['X', 'XI', 'XII'], majors: ['IPA', 'IPS', 'Bahasa'] },
+    Sejarah: { teacherId: teachers[5].teacher.teacher_id, gradeLevels: ['X', 'XI', 'XII'], majors: ['IPA', 'IPS', 'Bahasa'] },
+    Ekonomi: { teacherId: teachers[6].teacher.teacher_id, gradeLevels: ['X', 'XI', 'XII'], majors: ['IPS'] },
   };
 
-  const soals = [];
-  let soalCount = 0;
+  // ==================== CREATE QUESTION BANKS ====================
+  console.log('🏦 Creating question banks...');
+  const questionBanks = {}; // key: `${subject}-${gradeLevel}-${major}` => bank object
+  let bankCount = 0;
 
-  for (const [mataPelajaran, config] of Object.entries(mataPelajaranData)) {
-    const templates = soalTemplates[mataPelajaran] || soalTemplates['Matematika'];
+  for (const [subjectName, config] of Object.entries(subjectData)) {
+    for (const gradeLevel of config.gradeLevels) {
+      for (const majorItem of config.majors) {
+        const bankName = `${subjectName} - ${gradeLevel} - ${majorItem}`;
+        const bank = await prisma.questionBank.create({
+          data: {
+            bank_name: bankName,
+            description: `Bank soal ${subjectName} untuk kelas ${gradeLevel} jurusan ${majorItem}`,
+            subject: subjectName,
+            grade_level: gradeLevel,
+            major: majorItem,
+            teacher_id: config.teacherId,
+          },
+        });
+        questionBanks[`${subjectName}-${gradeLevel}-${majorItem}`] = bank;
+        bankCount++;
+      }
+    }
+  }
+  console.log(`✅ Created ${bankCount} question banks\n`);
 
-    for (const tingkat of config.tingkats) {
-      for (const jurusan of config.jurusans) {
-        // Create 10 PG Single soals
+  // ==================== CREATE QUESTIONS (assigned to banks) ====================
+  const questions = [];
+  let questionCount = 0;
+
+  for (const [subjectName, config] of Object.entries(subjectData)) {
+    const templates = questionTemplates[subjectName] || questionTemplates['Matematika'];
+
+    for (const gradeLevel of config.gradeLevels) {
+      for (const majorItem of config.majors) {
+        const bankKey = `${subjectName}-${gradeLevel}-${majorItem}`;
+        const bank = questionBanks[bankKey];
+
+        // Create 10 Single Choice questions
         for (let i = 0; i < 10; i++) {
           const template = templates[i % templates.length];
-          const soal = await prisma.soals.create({
+          const question = await prisma.question.create({
             data: {
-              tipe_soal: 'PILIHAN_GANDA_SINGLE',
-              teks_soal: `[${tingkat}-${jurusan}] ${template.teks}`,
-              mata_pelajaran: mataPelajaran,
-              tingkat: tingkat,
-              jurusan: jurusan,
-              soal_pembahasan: `Pembahasan untuk soal ${mataPelajaran} tingkat ${tingkat}`,
-              guru_id: config.guru,
-              updatedAt: new Date(),
-              opsi_jawabans: {
-                create: template.opsi.map((opsi, idx) => ({
+              question_type: 'SINGLE_CHOICE',
+              question_text: `[${gradeLevel}-${majorItem}] ${template.text}`,
+              subject: subjectName,
+              grade_level: gradeLevel,
+              major: majorItem,
+              question_explanation: `Pembahasan untuk soal ${subjectName} tingkat ${gradeLevel}`,
+              teacher_id: config.teacherId,
+              question_bank_id: bank.question_bank_id,
+              answer_options: {
+                create: template.options.map((opt, idx) => ({
                   label: String.fromCharCode(65 + idx),
-                  teks_opsi: opsi,
-                  is_benar: template.benar[0] === idx,
+                  option_text: opt,
+                  is_correct: template.correct[0] === idx,
                 })),
               },
             },
           });
-          soals.push(soal);
-          soalCount++;
+          questions.push(question);
+          questionCount++;
         }
 
-        // Create 5 PG Multiple soals
+        // Create 5 Multiple Choice questions
         for (let i = 0; i < 5; i++) {
-          const template = templates.find(t => t.benar.length > 1) || templates[0];
-          const correctAnswers = template.benar.length > 1 ? template.benar : [0, 1];
+          const template = templates.find(t => t.correct.length > 1) || templates[0];
+          const correctAnswers = template.correct.length > 1 ? template.correct : [0, 1];
 
-          const soal = await prisma.soals.create({
+          const question = await prisma.question.create({
             data: {
-              tipe_soal: 'PILIHAN_GANDA_MULTIPLE',
-              teks_soal: `[${tingkat}-${jurusan}] [MULTIPLE] ${template.teks} (Pilih semua yang benar)`,
-              mata_pelajaran: mataPelajaran,
-              tingkat: tingkat,
-              jurusan: jurusan,
-              soal_pembahasan: `Pembahasan untuk soal PG Multiple ${mataPelajaran}`,
-              guru_id: config.guru,
-              updatedAt: new Date(),
-              opsi_jawabans: {
-                create: template.opsi.map((opsi, idx) => ({
+              question_type: 'MULTIPLE_CHOICE',
+              question_text: `[${gradeLevel}-${majorItem}] [MULTIPLE] ${template.text} (Pilih semua yang benar)`,
+              subject: subjectName,
+              grade_level: gradeLevel,
+              major: majorItem,
+              question_explanation: `Pembahasan untuk soal PG Multiple ${subjectName}`,
+              teacher_id: config.teacherId,
+              question_bank_id: bank.question_bank_id,
+              answer_options: {
+                create: template.options.map((opt, idx) => ({
                   label: String.fromCharCode(65 + idx),
-                  teks_opsi: opsi,
-                  is_benar: correctAnswers.includes(idx),
+                  option_text: opt,
+                  is_correct: correctAnswers.includes(idx),
                 })),
               },
             },
           });
-          soals.push(soal);
-          soalCount++;
+          questions.push(question);
+          questionCount++;
         }
 
-        // Create 5 Essay soals
+        // Create 5 Essay questions
         for (let i = 0; i < 5; i++) {
-          const soal = await prisma.soals.create({
+          const question = await prisma.question.create({
             data: {
-              tipe_soal: 'ESSAY',
-              teks_soal: `[${tingkat}-${jurusan}] Jelaskan secara detail tentang konsep ${mataPelajaran} terkait topik ${i + 1}. Berikan contoh dan analisis yang mendalam.`,
-              mata_pelajaran: mataPelajaran,
-              tingkat: tingkat,
-              jurusan: jurusan,
-              soal_pembahasan: `Pembahasan essay ${mataPelajaran}`,
-              guru_id: config.guru,
-              updatedAt: new Date(),
+              question_type: 'ESSAY',
+              question_text: `[${gradeLevel}-${majorItem}] Jelaskan secara detail tentang konsep ${subjectName} terkait topik ${i + 1}. Berikan contoh dan analisis yang mendalam.`,
+              subject: subjectName,
+              grade_level: gradeLevel,
+              major: majorItem,
+              question_explanation: `Pembahasan essay ${subjectName}`,
+              teacher_id: config.teacherId,
+              question_bank_id: bank.question_bank_id,
             },
           });
-          soals.push(soal);
-          soalCount++;
+          questions.push(question);
+          questionCount++;
         }
       }
     }
   }
-  console.log(`✅ Created ${soalCount} soals (PG Single, PG Multiple, Essay)\n`);
+  console.log(`✅ Created ${questionCount} questions (Single Choice, Multiple Choice, Essay)\n`);
 
-  // ==================== CREATE UJIANS (All Statuses) ====================
-  console.log('📋 Creating ujians with various statuses...');
+  // ==================== CREATE EXAMS (All Statuses) ====================
+  console.log('📋 Creating exams with various statuses...');
 
   const now = new Date();
-  const ujianTemplates = [];
+  const examTemplates = [];
 
-  // TERJADWAL (Future)
+  // SCHEDULED (Future)
   for (let i = 0; i < 3; i++) {
-    ujianTemplates.push({
-      nama: `Ujian Tengah Semester Matematika ${i + 1}`,
-      mapel: 'Matematika',
-      tingkat: ['X', 'XI', 'XII'][i],
-      jurusan: 'IPA',
-      guru: gurus[0].guru.guru_id,
-      status: 'TERJADWAL',
-      tanggalMulai: new Date(now.getTime() + (i + 1) * 24 * 60 * 60 * 1000),
-      durasi: 90,
-      acak: i % 2 === 0,
+    examTemplates.push({
+      name: `Ujian Tengah Semester Matematika ${i + 1}`,
+      subject: 'Matematika',
+      gradeLevel: ['X', 'XI', 'XII'][i],
+      major: 'IPA',
+      teacherId: teachers[0].teacher.teacher_id,
+      status: 'SCHEDULED',
+      startDate: new Date(now.getTime() + (i + 1) * 24 * 60 * 60 * 1000),
+      duration: 90,
+      shuffle: i % 2 === 0,
     });
   }
 
-  // BERLANGSUNG (Current)
+  // ONGOING (Current)
   for (let i = 0; i < 3; i++) {
-    const mulai = new Date(now.getTime() - 30 * 60 * 1000); // Started 30 min ago
-    const selesai = new Date(now.getTime() + 60 * 60 * 1000); // Ends in 1 hour
+    const startTime = new Date(now.getTime() - 30 * 60 * 1000); // Started 30 min ago
+    const endTime = new Date(now.getTime() + 60 * 60 * 1000); // Ends in 1 hour
 
-    ujianTemplates.push({
-      nama: `Ujian Berlangsung Fisika ${i + 1}`,
-      mapel: 'Fisika',
-      tingkat: ['X', 'XI', 'XII'][i],
-      jurusan: 'IPA',
-      guru: gurus[1].guru.guru_id,
-      status: 'BERLANGSUNG',
-      tanggalMulai: mulai,
-      tanggalSelesai: selesai,
-      durasi: 90,
-      acak: true,
+    examTemplates.push({
+      name: `Ujian Berlangsung Fisika ${i + 1}`,
+      subject: 'Fisika',
+      gradeLevel: ['X', 'XI', 'XII'][i],
+      major: 'IPA',
+      teacherId: teachers[1].teacher.teacher_id,
+      status: 'ONGOING',
+      startDate: startTime,
+      endDate: endTime,
+      duration: 90,
+      shuffle: true,
     });
   }
 
-  // BERAKHIR (Past)
+  // ENDED (Past)
   for (let i = 0; i < 3; i++) {
-    ujianTemplates.push({
-      nama: `Ujian Akhir Semester Kimia ${i + 1}`,
-      mapel: 'Kimia',
-      tingkat: ['X', 'XI', 'XII'][i],
-      jurusan: 'IPA',
-      guru: gurus[2].guru.guru_id,
-      status: 'BERAKHIR',
-      tanggalMulai: new Date(now.getTime() - (i + 2) * 24 * 60 * 60 * 1000),
-      durasi: 90,
-      acak: false,
+    examTemplates.push({
+      name: `Ujian Akhir Semester Kimia ${i + 1}`,
+      subject: 'Kimia',
+      gradeLevel: ['X', 'XI', 'XII'][i],
+      major: 'IPA',
+      teacherId: teachers[2].teacher.teacher_id,
+      status: 'ENDED',
+      startDate: new Date(now.getTime() - (i + 2) * 24 * 60 * 60 * 1000),
+      duration: 90,
+      shuffle: false,
     });
   }
 
-  // Additional ujians for other subjects
-  ujianTemplates.push(
-    { nama: 'Ujian Biologi Kelas X', mapel: 'Biologi', tingkat: 'X', jurusan: 'IPA', guru: gurus[3].guru.guru_id, status: 'BERAKHIR', tanggalMulai: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000), durasi: 90, acak: false },
-    { nama: 'Ujian Bahasa Indonesia', mapel: 'Bahasa Indonesia', tingkat: 'XI', jurusan: 'IPA', guru: gurus[4].guru.guru_id, status: 'BERLANGSUNG', tanggalMulai: new Date(now.getTime() - 20 * 60 * 1000), durasi: 90, acak: true },
-    { nama: 'Ujian Sejarah', mapel: 'Sejarah', tingkat: 'XII', jurusan: 'IPS', guru: gurus[5].guru.guru_id, status: 'TERJADWAL', tanggalMulai: new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000), durasi: 90, acak: false },
-    { nama: 'Ujian Ekonomi', mapel: 'Ekonomi', tingkat: 'XI', jurusan: 'IPS', guru: gurus[6].guru.guru_id, status: 'BERAKHIR', tanggalMulai: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000), durasi: 90, acak: true }
+  // Additional exams for other subjects
+  examTemplates.push(
+    { name: 'Ujian Biologi Kelas X', subject: 'Biologi', gradeLevel: 'X', major: 'IPA', teacherId: teachers[3].teacher.teacher_id, status: 'ENDED', startDate: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000), duration: 90, shuffle: false },
+    { name: 'Ujian Bahasa Indonesia', subject: 'Bahasa Indonesia', gradeLevel: 'XI', major: 'IPA', teacherId: teachers[4].teacher.teacher_id, status: 'ONGOING', startDate: new Date(now.getTime() - 20 * 60 * 1000), duration: 90, shuffle: true },
+    { name: 'Ujian Sejarah', subject: 'Sejarah', gradeLevel: 'XII', major: 'IPS', teacherId: teachers[5].teacher.teacher_id, status: 'SCHEDULED', startDate: new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000), duration: 90, shuffle: false },
+    { name: 'Ujian Ekonomi', subject: 'Ekonomi', gradeLevel: 'XI', major: 'IPS', teacherId: teachers[6].teacher.teacher_id, status: 'ENDED', startDate: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000), duration: 90, shuffle: true }
   );
 
-  const ujians = [];
-  for (const template of ujianTemplates) {
-    const tanggalMulai = template.tanggalMulai;
-    const tanggalSelesai = template.tanggalSelesai || new Date(tanggalMulai.getTime() + template.durasi * 60 * 1000);
+  const exams = [];
+  for (const template of examTemplates) {
+    const startDate = template.startDate;
+    const endDate = template.endDate || new Date(startDate.getTime() + template.duration * 60 * 1000);
 
-    const ujian = await prisma.ujians.create({
+    const exam = await prisma.exam.create({
       data: {
-        nama_ujian: template.nama,
-        mata_pelajaran: template.mapel,
-        tingkat: template.tingkat,
-        jurusan: template.jurusan,
-        tanggal_mulai: tanggalMulai,
-        tanggal_selesai: tanggalSelesai,
-        durasi_menit: template.durasi,
-        is_acak_soal: template.acak,
-        status_ujian: template.status,
-        guru_id: template.guru,
-        updatedAt: new Date(),
+        exam_name: template.name,
+        subject: template.subject,
+        grade_level: template.gradeLevel,
+        major: template.major,
+        start_date: startDate,
+        end_date: endDate,
+        duration_minutes: template.duration,
+        is_shuffle_questions: template.shuffle,
+        exam_status: template.status,
+        teacher_id: template.teacherId,
       },
     });
-    ujians.push(ujian);
+    exams.push(exam);
   }
-  console.log(`✅ Created ${ujians.length} ujians (TERJADWAL, BERLANGSUNG, BERAKHIR)\n`);
+  console.log(`✅ Created ${exams.length} exams (SCHEDULED, ONGOING, ENDED)\n`);
 
-  // ==================== ASSIGN SOALS TO UJIANS ====================
-  console.log('🔗 Assigning soals to ujians...');
-  let soalUjianCount = 0;
+  // ==================== ASSIGN QUESTIONS TO EXAMS ====================
+  console.log('🔗 Assigning questions to exams...');
+  let examQuestionCount = 0;
 
-  for (const ujian of ujians) {
-    const matchingSoals = soals.filter(s => s.mata_pelajaran === ujian.mata_pelajaran && s.tingkat === ujian.tingkat && s.jurusan === ujian.jurusan);
+  for (const exam of exams) {
+    const matchingQuestions = questions.filter(s => s.subject === exam.subject && s.grade_level === exam.grade_level && s.major === exam.major);
 
-    const pgSingleSoals = matchingSoals.filter(s => s.tipe_soal === 'PILIHAN_GANDA_SINGLE').slice(0, 8);
-    const pgMultipleSoals = matchingSoals.filter(s => s.tipe_soal === 'PILIHAN_GANDA_MULTIPLE').slice(0, 2);
-    const essaySoals = matchingSoals.filter(s => s.tipe_soal === 'ESSAY').slice(0, 3);
-    const selectedSoals = [...pgSingleSoals, ...pgMultipleSoals, ...essaySoals];
+    const pgSingleQuestions = matchingQuestions.filter(s => s.question_type === 'SINGLE_CHOICE').slice(0, 8);
+    const pgMultipleQuestions = matchingQuestions.filter(s => s.question_type === 'MULTIPLE_CHOICE').slice(0, 2);
+    const essayQuestions = matchingQuestions.filter(s => s.question_type === 'ESSAY').slice(0, 3);
+    const selectedQuestions = [...pgSingleQuestions, ...pgMultipleQuestions, ...essayQuestions];
 
-    for (let i = 0; i < selectedSoals.length; i++) {
-      await prisma.soal_ujians.create({
+    for (let i = 0; i < selectedQuestions.length; i++) {
+      await prisma.examQuestion.create({
         data: {
-          ujian_id: ujian.ujian_id,
-          soal_id: selectedSoals[i].soal_id,
-          bobot_nilai: selectedSoals[i].tipe_soal === 'ESSAY' ? 20 : selectedSoals[i].tipe_soal === 'PILIHAN_GANDA_MULTIPLE' ? 15 : 10,
-          urutan: i + 1,
+          exam_id: exam.exam_id,
+          question_id: selectedQuestions[i].question_id,
+          score_weight: selectedQuestions[i].question_type === 'ESSAY' ? 20 : selectedQuestions[i].question_type === 'MULTIPLE_CHOICE' ? 15 : 10,
+          sequence: i + 1,
         },
       });
-      soalUjianCount++;
+      examQuestionCount++;
     }
   }
-  console.log(`✅ Created ${soalUjianCount} soal-ujian assignments\n`);
+  console.log(`✅ Created ${examQuestionCount} exam-question assignments\n`);
 
-  // ==================== ASSIGN SISWAS TO UJIANS ====================
-  console.log('👥 Assigning siswas to ujians...');
-  let pesertaUjianCount = 0;
+  // ==================== ASSIGN STUDENTS TO EXAMS ====================
+  console.log('👥 Assigning students to exams...');
+  let examParticipantCount = 0;
 
-  for (const ujian of ujians) {
-    const matchingSiswas = siswas.filter(s => s.siswa.tingkat === ujian.tingkat && s.siswa.jurusan === ujian.jurusan && s.status_aktif);
+  for (const exam of exams) {
+    const matchingStudents = students.filter(s => s.student.grade_level === exam.grade_level && s.student.major === exam.major && s.is_active);
 
-    for (const siswa of matchingSiswas) {
-      await prisma.peserta_ujians.create({
+    for (const studentItem of matchingStudents) {
+      await prisma.examParticipant.create({
         data: {
-          ujian_id: ujian.ujian_id,
-          siswa_id: siswa.siswa.siswa_id,
-          status_ujian: 'BELUM_MULAI',
+          exam_id: exam.exam_id,
+          student_id: studentItem.student.student_id,
+          exam_status: 'NOT_STARTED',
           is_blocked: false,
         },
       });
-      pesertaUjianCount++;
+      examParticipantCount++;
     }
   }
-  console.log(`✅ Created ${pesertaUjianCount} peserta-ujian assignments\n`);
+  console.log(`✅ Created ${examParticipantCount} exam-participant assignments\n`);
 
-  // ==================== CREATE COMPLETED UJIANS WITH ALL STATUSES ====================
-  console.log('✍️ Creating sample completed ujians with various statuses...');
+  // ==================== CREATE COMPLETED EXAMS WITH ALL STATUSES ====================
+  console.log('✍️ Creating sample completed exams with various statuses...');
 
-  let jawabanCount = 0;
-  let hasilCount = 0;
+  let answerCount = 0;
+  let resultCount = 0;
 
-  // Process BERAKHIR ujians
-  const berakhirUjians = ujians.filter(u => u.status_ujian === 'BERAKHIR');
+  // Process ENDED exams
+  const endedExams = exams.filter(u => u.exam_status === 'ENDED');
 
-  for (const ujian of berakhirUjians) {
-    const pesertaUjians = await prisma.peserta_ujians.findMany({
-      where: { ujian_id: ujian.ujian_id },
+  for (const exam of endedExams) {
+    const examParticipants = await prisma.examParticipant.findMany({
+      where: { exam_id: exam.exam_id },
       take: 8,
     });
 
-    const soalUjians = await prisma.soal_ujians.findMany({
-      where: { ujian_id: ujian.ujian_id },
-      include: { soals: { include: { opsi_jawabans: true } } },
+    const examQuestions = await prisma.examQuestion.findMany({
+      where: { exam_id: exam.exam_id },
+      include: { question: { include: { answer_options: true } } },
     });
 
-    for (let idx = 0; idx < pesertaUjians.length; idx++) {
-      const peserta = pesertaUjians[idx];
+    for (let idx = 0; idx < examParticipants.length; idx++) {
+      const participant = examParticipants[idx];
 
-      // Various statuses: SELESAI, DINILAI, some SEDANG_DIKERJAKAN
+      // Various statuses: COMPLETED, GRADED, some IN_PROGRESS
       let status;
-      let waktuMulai = null;
-      let waktuSelesai = null;
+      let startTime = null;
+      let endTime = null;
       let isBlocked = false;
       let blockReason = null;
       let unlockCode = null;
 
       if (idx < 5) {
-        // DINILAI - Completed and graded
-        status = 'DINILAI';
-        waktuMulai = new Date(ujian.tanggal_mulai.getTime() + Math.floor(Math.random() * 10) * 60 * 1000);
-        waktuSelesai = new Date(waktuMulai.getTime() + (40 + Math.floor(Math.random() * 30)) * 60 * 1000);
+        // GRADED - Completed and graded
+        status = 'GRADED';
+        startTime = new Date(exam.start_date.getTime() + Math.floor(Math.random() * 10) * 60 * 1000);
+        endTime = new Date(startTime.getTime() + (40 + Math.floor(Math.random() * 30)) * 60 * 1000);
       } else if (idx < 7) {
-        // SELESAI - Completed but not graded yet (has essay)
-        status = 'SELESAI';
-        waktuMulai = new Date(ujian.tanggal_mulai.getTime() + Math.floor(Math.random() * 10) * 60 * 1000);
-        waktuSelesai = new Date(waktuMulai.getTime() + (45 + Math.floor(Math.random() * 25)) * 60 * 1000);
+        // COMPLETED - Completed but not graded yet (has essay)
+        status = 'COMPLETED';
+        startTime = new Date(exam.start_date.getTime() + Math.floor(Math.random() * 10) * 60 * 1000);
+        endTime = new Date(startTime.getTime() + (45 + Math.floor(Math.random() * 25)) * 60 * 1000);
       } else {
-        // SEDANG_DIKERJAKAN - Started but abandoned (blocked student)
-        status = 'SEDANG_DIKERJAKAN';
-        waktuMulai = new Date(ujian.tanggal_mulai.getTime() + Math.floor(Math.random() * 15) * 60 * 1000);
+        // IN_PROGRESS - Started but abandoned (blocked student)
+        status = 'IN_PROGRESS';
+        startTime = new Date(exam.start_date.getTime() + Math.floor(Math.random() * 15) * 60 * 1000);
         isBlocked = true;
         blockReason = 'Terdeteksi tab switching berulang kali';
         unlockCode = `UNLOCK${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
       }
 
-      await prisma.peserta_ujians.update({
-        where: { peserta_ujian_id: peserta.peserta_ujian_id },
+      await prisma.examParticipant.update({
+        where: { exam_participant_id: participant.exam_participant_id },
         data: {
-          status_ujian: status,
-          waktu_mulai: waktuMulai,
-          waktu_selesai: waktuSelesai,
+          exam_status: status,
+          start_time: startTime,
+          end_time: endTime,
           is_blocked: isBlocked,
           block_reason: blockReason,
           unlock_code: unlockCode,
@@ -483,153 +516,153 @@ async function main() {
       });
 
       // Create answers
-      if (status === 'DINILAI' || status === 'SELESAI') {
-        let totalNilai = 0;
-        let totalBobot = 0;
+      if (status === 'GRADED' || status === 'COMPLETED') {
+        let totalScore = 0;
+        let totalWeight = 0;
         let hasUngradedEssay = false;
 
-        for (const soalUjian of soalUjians) {
-          totalBobot += soalUjian.bobot_nilai;
+        for (const examQuestion of examQuestions) {
+          totalWeight += examQuestion.score_weight;
 
-          if (soalUjian.soals.tipe_soal === 'PILIHAN_GANDA_SINGLE') {
+          if (examQuestion.question.question_type === 'SINGLE_CHOICE') {
             const isCorrect = Math.random() > 0.25;
-            const correctOpsi = soalUjian.soals.opsi_jawabans.find(o => o.is_benar);
-            const incorrectOpsi = soalUjian.soals.opsi_jawabans.find(o => !o.is_benar);
-            const selectedOpsi = isCorrect ? correctOpsi : incorrectOpsi;
+            const correctOption = examQuestion.question.answer_options.find(o => o.is_correct);
+            const incorrectOption = examQuestion.question.answer_options.find(o => !o.is_correct);
+            const selectedOption = isCorrect ? correctOption : incorrectOption;
 
-            await prisma.jawabans.create({
+            await prisma.answer.create({
               data: {
-                peserta_ujian_id: peserta.peserta_ujian_id,
-                soal_id: soalUjian.soal_id,
-                jawaban_pg_opsi_ids: JSON.stringify([selectedOpsi.opsi_id.toString()]),
+                exam_participant_id: participant.exam_participant_id,
+                question_id: examQuestion.question_id,
+                mc_option_ids: JSON.stringify([selectedOption.option_id.toString()]),
                 is_correct: isCorrect,
               },
             });
 
-            if (isCorrect) totalNilai += soalUjian.bobot_nilai;
-            jawabanCount++;
-          } else if (soalUjian.soals.tipe_soal === 'PILIHAN_GANDA_MULTIPLE') {
-            const correctOpsis = soalUjian.soals.opsi_jawabans.filter(o => o.is_benar);
+            if (isCorrect) totalScore += examQuestion.score_weight;
+            answerCount++;
+          } else if (examQuestion.question.question_type === 'MULTIPLE_CHOICE') {
+            const correctOptions = examQuestion.question.answer_options.filter(o => o.is_correct);
             const isCorrect = Math.random() > 0.4;
-            const selectedOpsis = isCorrect ? correctOpsis : getRandomElements(soalUjian.soals.opsi_jawabans, 2);
+            const selectedOptions = isCorrect ? correctOptions : getRandomElements(examQuestion.question.answer_options, 2);
 
-            await prisma.jawabans.create({
+            await prisma.answer.create({
               data: {
-                peserta_ujian_id: peserta.peserta_ujian_id,
-                soal_id: soalUjian.soal_id,
-                jawaban_pg_opsi_ids: JSON.stringify(selectedOpsis.map(o => o.opsi_id.toString())),
+                exam_participant_id: participant.exam_participant_id,
+                question_id: examQuestion.question_id,
+                mc_option_ids: JSON.stringify(selectedOptions.map(o => o.option_id.toString())),
                 is_correct: isCorrect,
               },
             });
 
-            if (isCorrect) totalNilai += soalUjian.bobot_nilai;
-            jawabanCount++;
-          } else if (soalUjian.soals.tipe_soal === 'ESSAY') {
-            const nilaiManual = status === 'DINILAI' ? 70 + Math.floor(Math.random() * 26) : null;
-            const nilaiDidapat = nilaiManual ? (nilaiManual / 100) * soalUjian.bobot_nilai : 0;
+            if (isCorrect) totalScore += examQuestion.score_weight;
+            answerCount++;
+          } else if (examQuestion.question.question_type === 'ESSAY') {
+            const manualScore = status === 'GRADED' ? 70 + Math.floor(Math.random() * 26) : null;
+            const earnedScore = manualScore ? (manualScore / 100) * examQuestion.score_weight : 0;
 
-            if (!nilaiManual) hasUngradedEssay = true;
+            if (!manualScore) hasUngradedEssay = true;
 
-            await prisma.jawabans.create({
+            await prisma.answer.create({
               data: {
-                peserta_ujian_id: peserta.peserta_ujian_id,
-                soal_id: soalUjian.soal_id,
-                jawaban_essay_text: 'Ini adalah contoh jawaban essay dari siswa. Jawaban ini berisi penjelasan detail mengenai topik yang ditanyakan dengan analisis yang mendalam dan contoh-contoh yang relevan.',
-                nilai_manual: nilaiManual,
+                exam_participant_id: participant.exam_participant_id,
+                question_id: examQuestion.question_id,
+                essay_answer_text: 'Ini adalah contoh jawaban essay dari siswa. Jawaban ini berisi penjelasan detail mengenai topik yang ditanyakan dengan analisis yang mendalam dan contoh-contoh yang relevan.',
+                manual_score: manualScore,
               },
             });
 
-            if (nilaiManual) totalNilai += nilaiDidapat;
-            jawabanCount++;
+            if (manualScore) totalScore += earnedScore;
+            answerCount++;
           }
         }
 
-        // Create hasil_ujian only for DINILAI
-        if (status === 'DINILAI') {
-          const nilaiAkhir = (totalNilai / totalBobot) * 100;
-          await prisma.hasil_ujians.create({
+        // Create exam result only for GRADED
+        if (status === 'GRADED') {
+          const finalScore = (totalScore / totalWeight) * 100;
+          await prisma.examResult.create({
             data: {
-              peserta_ujian_id: peserta.peserta_ujian_id,
-              nilai_akhir: Math.round(nilaiAkhir * 100) / 100,
-              tanggal_submit: waktuSelesai,
+              exam_participant_id: participant.exam_participant_id,
+              final_score: Math.round(finalScore * 100) / 100,
+              submit_date: endTime,
             },
           });
-          hasilCount++;
+          resultCount++;
         }
-      } else if (status === 'SEDANG_DIKERJAKAN') {
+      } else if (status === 'IN_PROGRESS') {
         // Partial answers for blocked students
-        const partialSoals = getRandomElements(soalUjians, Math.floor(soalUjians.length / 2));
+        const partialQuestions = getRandomElements(examQuestions, Math.floor(examQuestions.length / 2));
 
-        for (const soalUjian of partialSoals) {
-          if (soalUjian.soals.tipe_soal === 'PILIHAN_GANDA_SINGLE') {
-            const randomOpsi = getRandomElements(soalUjian.soals.opsi_jawabans, 1)[0];
-            await prisma.jawabans.create({
+        for (const examQuestion of partialQuestions) {
+          if (examQuestion.question.question_type === 'SINGLE_CHOICE') {
+            const randomOption = getRandomElements(examQuestion.question.answer_options, 1)[0];
+            await prisma.answer.create({
               data: {
-                peserta_ujian_id: peserta.peserta_ujian_id,
-                soal_id: soalUjian.soal_id,
-                jawaban_pg_opsi_ids: JSON.stringify([randomOpsi.opsi_id.toString()]),
-                is_correct: randomOpsi.is_benar,
+                exam_participant_id: participant.exam_participant_id,
+                question_id: examQuestion.question_id,
+                mc_option_ids: JSON.stringify([randomOption.option_id.toString()]),
+                is_correct: randomOption.is_correct,
               },
             });
-            jawabanCount++;
+            answerCount++;
           }
         }
       }
     }
   }
 
-  // Process BERLANGSUNG ujians - some started
-  const berlangusungUjians = ujians.filter(u => u.status_ujian === 'BERLANGSUNG');
+  // Process ONGOING exams - some started
+  const ongoingExams = exams.filter(u => u.exam_status === 'ONGOING');
 
-  for (const ujian of berlangusungUjians) {
-    const pesertaUjians = await prisma.peserta_ujians.findMany({
-      where: { ujian_id: ujian.ujian_id },
+  for (const exam of ongoingExams) {
+    const examParticipants = await prisma.examParticipant.findMany({
+      where: { exam_id: exam.exam_id },
       take: 5,
     });
 
-    for (let idx = 0; idx < pesertaUjians.length; idx++) {
-      const peserta = pesertaUjians[idx];
+    for (let idx = 0; idx < examParticipants.length; idx++) {
+      const participant = examParticipants[idx];
 
       if (idx < 3) {
-        // SEDANG_DIKERJAKAN - Currently working
-        const waktuMulai = new Date(ujian.tanggal_mulai.getTime() + Math.floor(Math.random() * 20) * 60 * 1000);
+        // IN_PROGRESS - Currently working
+        const startTime = new Date(exam.start_date.getTime() + Math.floor(Math.random() * 20) * 60 * 1000);
 
-        await prisma.peserta_ujians.update({
-          where: { peserta_ujian_id: peserta.peserta_ujian_id },
+        await prisma.examParticipant.update({
+          where: { exam_participant_id: participant.exam_participant_id },
           data: {
-            status_ujian: 'SEDANG_DIKERJAKAN',
-            waktu_mulai: waktuMulai,
+            exam_status: 'IN_PROGRESS',
+            start_time: startTime,
           },
         });
 
         // Create partial answers
-        const soalUjians = await prisma.soal_ujians.findMany({
-          where: { ujian_id: ujian.ujian_id },
-          include: { soals: { include: { opsi_jawabans: true } } },
+        const examQuestions = await prisma.examQuestion.findMany({
+          where: { exam_id: exam.exam_id },
+          include: { question: { include: { answer_options: true } } },
           take: 3,
         });
 
-        for (const soalUjian of soalUjians) {
-          if (soalUjian.soals.tipe_soal === 'PILIHAN_GANDA_SINGLE') {
-            const randomOpsi = getRandomElements(soalUjian.soals.opsi_jawabans, 1)[0];
-            await prisma.jawabans.create({
+        for (const examQuestion of examQuestions) {
+          if (examQuestion.question.question_type === 'SINGLE_CHOICE') {
+            const randomOption = getRandomElements(examQuestion.question.answer_options, 1)[0];
+            await prisma.answer.create({
               data: {
-                peserta_ujian_id: peserta.peserta_ujian_id,
-                soal_id: soalUjian.soal_id,
-                jawaban_pg_opsi_ids: JSON.stringify([randomOpsi.opsi_id.toString()]),
-                is_correct: randomOpsi.is_benar,
+                exam_participant_id: participant.exam_participant_id,
+                question_id: examQuestion.question_id,
+                mc_option_ids: JSON.stringify([randomOption.option_id.toString()]),
+                is_correct: randomOption.is_correct,
               },
             });
-            jawabanCount++;
+            answerCount++;
           }
         }
       }
-      // else: Keep as BELUM_MULAI
+      // else: Keep as NOT_STARTED
     }
   }
 
-  console.log(`✅ Created ${jawabanCount} jawabans`);
-  console.log(`✅ Created ${hasilCount} hasil ujians\n`);
+  console.log(`✅ Created ${answerCount} answers`);
+  console.log(`✅ Created ${resultCount} exam results\n`);
 
   // ==================== CREATE ACTIVITY LOGS ====================
   console.log('📊 Creating activity logs...');
@@ -637,7 +670,7 @@ async function main() {
   let logCount = 0;
 
   // LOGIN logs for various users
-  const activeUsers = [...siswas.slice(0, 30), ...gurus.slice(0, 5), admins[0], admins[1]];
+  const activeUsers = [...students.slice(0, 30), ...teachers.slice(0, 5), admins[0], admins[1]];
   for (const user of activeUsers) {
     const loginTime = randomDate(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), now);
     await prisma.activityLog.create({
@@ -680,32 +713,32 @@ async function main() {
     logCount++;
   }
 
-  // START_UJIAN and FINISH_UJIAN logs for completed ujians
-  for (const ujian of berakhirUjians) {
-    const pesertaUjians = await prisma.peserta_ujians.findMany({
+  // START_UJIAN and FINISH_UJIAN logs for completed exams
+  for (const exam of endedExams) {
+    const examParticipants = await prisma.examParticipant.findMany({
       where: {
-        ujian_id: ujian.ujian_id,
-        status_ujian: { in: ['SELESAI', 'DINILAI'] },
+        exam_id: exam.exam_id,
+        exam_status: { in: ['COMPLETED', 'GRADED'] },
       },
-      include: { siswas: { include: { user: true } } },
+      include: { student: { include: { user: true } } },
     });
 
-    for (const peserta of pesertaUjians) {
+    for (const participant of examParticipants) {
       // START_UJIAN log
       await prisma.activityLog.create({
         data: {
-          user_id: peserta.siswas.user.id,
-          peserta_ujian_id: peserta.peserta_ujian_id,
+          user_id: participant.student.user.id,
+          exam_participant_id: participant.exam_participant_id,
           activity_type: 'START_UJIAN',
-          description: `Siswa ${peserta.siswas.nama_lengkap} memulai ujian ${ujian.nama_ujian}`,
+          description: `Siswa ${participant.student.full_name} memulai ujian ${exam.exam_name}`,
           ip_address: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
           user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           metadata: JSON.stringify({
-            ujian_id: ujian.ujian_id,
-            nama_ujian: ujian.nama_ujian,
-            mata_pelajaran: ujian.mata_pelajaran,
+            exam_id: exam.exam_id,
+            exam_name: exam.exam_name,
+            subject: exam.subject,
           }),
-          created_at: peserta.waktu_mulai,
+          created_at: participant.start_time,
         },
       });
       logCount++;
@@ -714,18 +747,18 @@ async function main() {
       const isAutoFinish = Math.random() > 0.7;
       await prisma.activityLog.create({
         data: {
-          user_id: peserta.siswas.user.id,
-          peserta_ujian_id: peserta.peserta_ujian_id,
+          user_id: participant.student.user.id,
+          exam_participant_id: participant.exam_participant_id,
           activity_type: isAutoFinish ? 'AUTO_FINISH_UJIAN' : 'FINISH_UJIAN',
-          description: isAutoFinish ? `Ujian ${ujian.nama_ujian} diselesaikan otomatis karena waktu habis` : `Siswa ${peserta.siswas.nama_lengkap} menyelesaikan ujian ${ujian.nama_ujian}`,
+          description: isAutoFinish ? `Ujian ${exam.exam_name} diselesaikan otomatis karena waktu habis` : `Siswa ${participant.student.full_name} menyelesaikan ujian ${exam.exam_name}`,
           ip_address: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
           user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           metadata: JSON.stringify({
-            ujian_id: ujian.ujian_id,
-            nama_ujian: ujian.nama_ujian,
+            exam_id: exam.exam_id,
+            exam_name: exam.exam_name,
             is_auto_finish: isAutoFinish,
           }),
-          created_at: peserta.waktu_selesai,
+          created_at: participant.end_time,
         },
       });
       logCount++;
@@ -733,27 +766,27 @@ async function main() {
   }
 
   // BLOCK_STUDENT logs
-  const blockedPeserta = await prisma.peserta_ujians.findMany({
+  const blockedParticipants = await prisma.examParticipant.findMany({
     where: { is_blocked: true },
-    include: { siswas: { include: { user: true } }, ujians: true },
+    include: { student: { include: { user: true } }, exam: true },
   });
 
-  for (const peserta of blockedPeserta) {
+  for (const participant of blockedParticipants) {
     await prisma.activityLog.create({
       data: {
-        user_id: peserta.siswas.user.id,
-        peserta_ujian_id: peserta.peserta_ujian_id,
+        user_id: participant.student.user.id,
+        exam_participant_id: participant.exam_participant_id,
         activity_type: 'BLOCK_STUDENT',
-        description: `Siswa ${peserta.siswas.nama_lengkap} diblokir: ${peserta.block_reason}`,
+        description: `Siswa ${participant.student.full_name} diblokir: ${participant.block_reason}`,
         ip_address: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
         user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         metadata: JSON.stringify({
-          ujian_id: peserta.ujian_id,
-          nama_ujian: peserta.ujians.nama_ujian,
-          block_reason: peserta.block_reason,
-          unlock_code: peserta.unlock_code,
+          exam_id: participant.exam_id,
+          exam_name: participant.exam.exam_name,
+          block_reason: participant.block_reason,
+          unlock_code: participant.unlock_code,
         }),
-        created_at: peserta.waktu_mulai,
+        created_at: participant.start_time,
       },
     });
     logCount++;
@@ -775,8 +808,8 @@ async function main() {
     const activity = additionalActivities[Math.floor(Math.random() * additionalActivities.length)];
     const user =
       activity.type.includes('GURU') || activity.type.includes('CREATE') || activity.type.includes('UPDATE') || activity.type.includes('DELETE') || activity.type.includes('GRADE') || activity.type.includes('EXPORT')
-        ? gurus[Math.floor(Math.random() * 5)]
-        : siswas[Math.floor(Math.random() * 20)];
+        ? teachers[Math.floor(Math.random() * 5)]
+        : students[Math.floor(Math.random() * 20)];
 
     await prisma.activityLog.create({
       data: {
@@ -800,20 +833,20 @@ async function main() {
 
   // ==================== SUMMARY ====================
   console.log('📊 =============== SEEDING SUMMARY ===============');
-  console.log(`✅ Admins: ${admins.length} (2 aktif, 1 nonaktif)`);
-  console.log(`✅ Gurus: ${gurus.length} (7 aktif, 1 nonaktif)`);
-  console.log(`✅ Siswas: ${siswas.length} (100 aktif, ${siswas.length - 100} nonaktif)`);
-  console.log(`✅ Soals: ${soalCount} (PG Single, PG Multiple, Essay)`);
-  console.log(`✅ Ujians: ${ujians.length} (TERJADWAL, BERLANGSUNG, BERAKHIR)`);
-  console.log(`✅ Soal-Ujian Assignments: ${soalUjianCount}`);
-  console.log(`✅ Peserta-Ujian Assignments: ${pesertaUjianCount}`);
-  console.log(`   - BELUM_MULAI: Multiple`);
-  console.log(`   - SEDANG_DIKERJAKAN: Multiple (including blocked)`);
-  console.log(`   - SELESAI: Multiple (completed, awaiting grading)`);
-  console.log(`   - DINILAI: Multiple (fully graded)`);
-  console.log(`   - Blocked Students: ${blockedPeserta.length}`);
-  console.log(`✅ Jawabans: ${jawabanCount}`);
-  console.log(`✅ Hasil Ujians: ${hasilCount}`);
+  console.log(`✅ Admins: ${admins.length} (2 active, 1 inactive)`);
+  console.log(`✅ Teachers: ${teachers.length} (7 active, 1 inactive)`);
+  console.log(`✅ Students: ${students.length} (100 active, ${students.length - 100} inactive)`);
+  console.log(`✅ Questions: ${questionCount} (Single Choice, Multiple Choice, Essay)`);
+  console.log(`✅ Exams: ${exams.length} (SCHEDULED, ONGOING, ENDED)`);
+  console.log(`✅ Exam-Question Assignments: ${examQuestionCount}`);
+  console.log(`✅ Exam-Participant Assignments: ${examParticipantCount}`);
+  console.log(`   - NOT_STARTED: Multiple`);
+  console.log(`   - IN_PROGRESS: Multiple (including blocked)`);
+  console.log(`   - COMPLETED: Multiple (completed, awaiting grading)`);
+  console.log(`   - GRADED: Multiple (fully graded)`);
+  console.log(`   - Blocked Students: ${blockedParticipants.length}`);
+  console.log(`✅ Answers: ${answerCount}`);
+  console.log(`✅ Exam Results: ${resultCount}`);
   console.log(`✅ Activity Logs: ${logCount}`);
   console.log(`   - LOGIN, LOGOUT, START_UJIAN, FINISH_UJIAN, AUTO_FINISH_UJIAN`);
   console.log(`   - BLOCK_STUDENT, CREATE_UJIAN, UPDATE_UJIAN, GRADE_ESSAY, etc.`);
@@ -823,8 +856,8 @@ async function main() {
   console.log('📝 Default password for all users: password123\n');
   console.log('👤 Sample Accounts:');
   console.log('   Admin: admin1 / password123');
-  console.log('   Guru: guru_mtk / password123');
-  console.log('   Siswa: siswa1 / password123');
+  console.log('   Teacher: guru_mtk / password123');
+  console.log('   Student: siswa1 / password123');
 }
 
 main()

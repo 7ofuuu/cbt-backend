@@ -16,8 +16,11 @@ const verifyToken = (req, res, next) => {
   const token = authHeader.split(' ')[1];
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret_key_cbt_2024');
-    req.user = decoded; // { id: userId, role: 'admin'|'guru'|'siswa' }
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET environment variable is not set');
+    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded; // { id: userId, role: 'admin'|'teacher'|'student' }
     next();
   } catch (error) {
     return res.status(401).json({ error: 'Token tidak valid atau sudah kadaluarsa' });
@@ -25,15 +28,19 @@ const verifyToken = (req, res, next) => {
 };
 
 // Middleware untuk check role
+// Supports: checkRole('admin'), checkRole('admin', 'teacher'), checkRole(['admin', 'teacher'])
 const checkRole = (...allowedRoles) => {
   return (req, res, next) => {
     if (!req.user || !req.user.role) {
       return res.status(403).json({ error: 'Akses ditolak: Role tidak ditemukan' });
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    // Flatten to handle both checkRole('admin', 'teacher') and checkRole(['admin', 'teacher'])
+    const roles = allowedRoles.flat();
+
+    if (!roles.includes(req.user.role)) {
       return res.status(403).json({ 
-        error: `Akses ditolak: Hanya ${allowedRoles.join(', ')} yang diizinkan` 
+        error: `Akses ditolak: Hanya ${roles.join(', ')} yang diizinkan` 
       });
     }
 
@@ -47,14 +54,24 @@ const checkRole = (...allowedRoles) => {
 
 const registerSchema = Joi.object({
   username: Joi.string().min(4).required(),
-  password: Joi.string().min(6).required(),
-  role: Joi.string().valid('admin', 'guru', 'siswa').required(),
-  nama: Joi.string().required(),
+  password: Joi.string().min(8)
+    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .required()
+    .messages({
+      'string.min': 'Password minimal 8 karakter',
+      'string.pattern.base': 'Password harus mengandung huruf besar, huruf kecil, dan angka',
+    }),
+  role: Joi.string().valid('admin', 'teacher', 'student').required(),
+  full_name: Joi.string().required(),
   
-  // Wajib jika role = siswa
-  kelas: Joi.when('role', { is: 'siswa', then: Joi.string().required() }),
-  tingkat: Joi.when('role', { is: 'siswa', then: Joi.string().required() }),
-  jurusan: Joi.when('role', { is: 'siswa', then: Joi.string().required() }),
+  // Required if role = siswa
+  classroom: Joi.when('role', { is: 'student', then: Joi.string().required() }),
+  grade_level: Joi.when('role', { is: 'student', then: Joi.string().required() }),
+  major: Joi.when('role', { is: 'student', then: Joi.string().required() }),
+
+  // Optional unique identifiers
+  nisn: Joi.when('role', { is: 'student', then: Joi.string().allow('', null).optional() }),
+  nip: Joi.when('role', { is: 'teacher', then: Joi.string().allow('', null).optional() }),
 });
 
 const validateRegister = (req, res, next) => {
@@ -63,8 +80,20 @@ const validateRegister = (req, res, next) => {
   next();
 };
 
+const loginSchema = Joi.object({
+  username: Joi.string().required(),
+  password: Joi.string().required(),
+});
+
+const validateLogin = (req, res, next) => {
+  const { error } = loginSchema.validate(req.body);
+  if (error) return res.status(400).json({ error: error.details[0].message });
+  next();
+};
+
 module.exports = { 
   verifyToken, 
   checkRole, 
-  validateRegister 
+  validateRegister,
+  validateLogin 
 };
