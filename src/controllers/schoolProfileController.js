@@ -1,0 +1,100 @@
+/**
+ * School Profile Controller
+ * Singleton school profile — always row id = 1.
+ * GET  /api/school-profile       → public (no auth) — used by headers, login, Flutter
+ * PUT  /api/school-profile       → admin only
+ */
+const prisma = require('../config/db');
+const { asyncHandler, AppError } = require('../utils/asyncHandler');
+const activityLogService = require('../services/activityLogService');
+
+// Ensure the singleton row exists (upsert with id = 1)
+const ensureProfile = async () => {
+  return prisma.schoolProfile.upsert({
+    where: { id: 1 },
+    update: {},
+    create: { id: 1, school_name: 'Nama Sekolah' },
+  });
+};
+
+// GET /api/school-profile
+const getSchoolProfile = asyncHandler(async (_req, res) => {
+  let profile = await prisma.schoolProfile.findUnique({ where: { id: 1 } });
+  if (!profile) profile = await ensureProfile();
+  res.json({ data: profile });
+});
+
+// PUT /api/school-profile  (admin only)
+const updateSchoolProfile = asyncHandler(async (req, res) => {
+  const {
+    school_name,
+    npsn,
+    address,
+    city,
+    province,
+    postal_code,
+    phone,
+    email,
+    website,
+    logo_url,
+    principal_name,
+    school_level,
+    accreditation,
+  } = req.body;
+
+  if (!school_name || !school_name.trim()) {
+    throw new AppError('Nama sekolah wajib diisi', 400);
+  }
+
+  // Sanitize: trim all string fields
+  const sanitize = (v) => (typeof v === 'string' ? v.trim() || null : v ?? null);
+
+  const profile = await prisma.schoolProfile.upsert({
+    where: { id: 1 },
+    update: {
+      school_name: school_name.trim(),
+      npsn: sanitize(npsn),
+      address: sanitize(address),
+      city: sanitize(city),
+      province: sanitize(province),
+      postal_code: sanitize(postal_code),
+      phone: sanitize(phone),
+      email: sanitize(email),
+      website: sanitize(website),
+      logo_url: sanitize(logo_url),
+      principal_name: sanitize(principal_name),
+      school_level: sanitize(school_level),
+      accreditation: sanitize(accreditation),
+    },
+    create: {
+      id: 1,
+      school_name: school_name.trim(),
+      npsn: sanitize(npsn),
+      address: sanitize(address),
+      city: sanitize(city),
+      province: sanitize(province),
+      postal_code: sanitize(postal_code),
+      phone: sanitize(phone),
+      email: sanitize(email),
+      website: sanitize(website),
+      logo_url: sanitize(logo_url),
+      principal_name: sanitize(principal_name),
+      school_level: sanitize(school_level),
+      accreditation: sanitize(accreditation),
+    },
+  });
+
+  // Activity log
+  await activityLogService.createLog({
+    user_id: req.user.id,
+    activity_type: 'UPDATE_SCHOOL_PROFILE',
+    description: `Admin memperbarui profil sekolah: ${school_name.trim()}`,
+    ip_address: activityLogService.getIpAddress(req),
+    user_agent: activityLogService.getUserAgent(req),
+    metadata: { school_name: school_name.trim(), updated_fields: Object.keys(req.body) },
+  });
+
+  res.json({ message: 'Profil sekolah berhasil diperbarui', data: profile });
+});
+
+module.exports = { getSchoolProfile, updateSchoolProfile };
