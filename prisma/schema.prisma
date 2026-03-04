@@ -260,3 +260,26 @@ enum QuestionType {
   MULTIPLE_CHOICE
   ESSAY
 }
+
+// ============================================
+// SCHOOL PROFILE (singleton – only 1 row)
+// ============================================
+model SchoolProfile {
+  id               Int      @id @default(1)
+  school_name      String   @default("Nama Sekolah")
+  npsn             String?  @db.VarChar(20)
+  address          String?  @db.Text
+  city             String?  @db.VarChar(100)
+  province         String?  @db.VarChar(100)
+  postal_code      String?  @db.VarChar(10)
+  phone            String?  @db.VarChar(30)
+  email            String?  @db.VarChar(100)
+  website          String?  @db.VarChar(200)
+  logo_url         String?  @db.Text
+  principal_name   String?  @db.VarChar(200)
+  school_level     String?  @db.VarChar(20) // SMA, SMK, MA, dll
+  accreditation    String?  @db.VarChar(5)  // A, B, C, Unggul, Baik, dll
+  updated_at       DateTime @updatedAt
+
+  @@map("school_profiles")
+}

@@ -19,7 +19,8 @@ const verifyToken = (req, res, next) => {
     if (!process.env.JWT_SECRET) {
       throw new Error('JWT_SECRET environment variable is not set');
     }
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Explicitly specify algorithm to prevent algorithm confusion attacks
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
     req.user = decoded; // { id: userId, role: 'admin'|'teacher'|'student' }
     next();
   } catch (error) {

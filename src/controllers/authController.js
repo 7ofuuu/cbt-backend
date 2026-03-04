@@ -48,7 +48,7 @@ const login = asyncHandler(async (req, res) => {
   const token = jwt.sign(
     { id: user.id, role: user.role, is_super_admin: user.is_super_admin || false },
     process.env.JWT_SECRET,
-    { expiresIn: '1d' }
+    { expiresIn: '1d', algorithm: 'HS256' }
   );
 
   await activityLogService.createLog({
@@ -171,8 +171,13 @@ const changePassword = asyncHandler(async (req, res) => {
     throw new AppError('Password saat ini dan password baru wajib diisi', 400);
   }
 
-  if (new_password.length < 6) {
-    throw new AppError('Password baru minimal 6 karakter', 400);
+  // Match registration password policy: min 8 chars, uppercase, lowercase, digit
+  if (new_password.length < 8) {
+    throw new AppError('Password baru minimal 8 karakter', 400);
+  }
+
+  if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(new_password)) {
+    throw new AppError('Password baru harus mengandung huruf besar, huruf kecil, dan angka', 400);
   }
 
   if (current_password === new_password) {

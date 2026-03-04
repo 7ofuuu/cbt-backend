@@ -13,6 +13,7 @@ const userRoutes = require('./src/routes/userRoutes');
 const activityRoutes = require('./src/routes/activityRoutes');
 const examResultRoutes = require('./src/routes/examResultRoutes');
 const activityLogRoutes = require('./src/routes/activityLogRoutes');
+const schoolProfileRoutes = require('./src/routes/schoolProfileRoutes');
 const autoFinishService = require('./src/services/autoFinishService');
 const autoExpireExamService = require('./src/services/autoExpireExamService');
 const { errorHandler } = require('./src/utils/asyncHandler');
@@ -48,6 +49,24 @@ app.use('/api/auth/login', rateLimit({
   message: { error: 'Terlalu banyak percobaan login, coba lagi dalam 15 menit' },
 }));
 
+// Rate limiting - change password (strict)
+app.use('/api/auth/change-password', rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // max 5 password change attempts per 15 min
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Terlalu banyak percobaan ganti password, coba lagi dalam 15 menit' },
+}));
+
+// Rate limiting - registration (moderate)
+app.use('/api/auth/register', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30, // max 30 registrations per 15 min (batch creation needs room)
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Terlalu banyak permintaan registrasi, coba lagi nanti' },
+}));
+
 // Rate limiting - general API (relaxed for dashboard)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -71,6 +90,7 @@ app.use('/api/users', userRoutes); // User Management (Admin) & Grading (Teacher
 app.use('/api/admin/activities', activityRoutes); // Activity Management (Admin)
 app.use('/api/exam-results', examResultRoutes); // Exam Results (Teacher & Student)
 app.use('/api/activity-logs', activityLogRoutes); // Activity Logs (Admin & Teacher)
+app.use('/api/school-profile', schoolProfileRoutes); // School Profile (Public GET, Admin PUT)
 
 // Test Route
 app.get('/', (req, res) => {

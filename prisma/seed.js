@@ -18,6 +18,7 @@ async function main() {
 
   // Clear existing data
   console.log('🗑️  Clearing existing data...');
+  await prisma.schoolProfile.deleteMany();
   await prisma.activityLog.deleteMany();
   await prisma.examResult.deleteMany();
   await prisma.answer.deleteMany();
@@ -32,6 +33,28 @@ async function main() {
   await prisma.admin.deleteMany();
   await prisma.user.deleteMany();
   console.log('✅ Data cleared\n');
+
+  // ==================== CREATE SCHOOL PROFILE ====================
+  console.log('🏫 Creating school profile...');
+  await prisma.schoolProfile.create({
+    data: {
+      id: 1,
+      school_name: 'SMAN 1 Parigi',
+      npsn: '20211986',
+      address: 'Jl. Raya Parigi No. 1, Kec. Parigi, Kab. Pangandaran',
+      city: 'Pangandaran',
+      province: 'Jawa Barat',
+      postal_code: '46393',
+      phone: '(0265) 641234',
+      email: 'sman1parigi@sch.id',
+      website: 'https://sman1parigi.sch.id',
+      logo_url: null,
+      principal_name: 'Drs. H. Ahmad, M.Pd',
+      school_level: 'SMA',
+      accreditation: 'A',
+    },
+  });
+  console.log('✅ School profile created\n');
 
   const hashedPassword = await bcrypt.hash('password123', 10);
 
