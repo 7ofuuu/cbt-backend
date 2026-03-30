@@ -2,22 +2,33 @@
  * Question Controller - Refactored
  * Uses asyncHandler and resolveTeacher middleware.
  * Teacher lookup eliminated via req.teacher from middleware.
+ * Subject-based access control: teachers only see/modify their subject's resources.
+ * Coordinators have full access to all resources.
  */
 const prisma = require('../config/db');
 const { asyncHandler, AppError } = require('../utils/asyncHandler');
 const { guardExamStatus } = require('../services/examService');
 const activityLogService = require('../services/activityLogService');
+const { 
+  validateSubjectAccess, 
+  buildSubjectFilter, 
+  getSubjectForCreate,
+  isCoordinator,
+} = require('../services/subjectAccessService');
 
 // ==================== QUESTION BANK CRUD ====================
 
-// POST /api/questions/bank - Create Question Bank (any teacher)
+// POST /api/questions/bank - Create Question Bank
 const createQuestionBank = asyncHandler(async (req, res) => {
   const teacher = req.teacher;
   const { bank_name, description, subject, grade_level, major } = req.body;
 
-  if (!bank_name || !subject || !grade_level) {
-    throw new AppError('bank_name, subject, dan grade_level wajib diisi', 400);
+  if (!bank_name || !grade_level) {
+    throw new AppError('bank_name dan grade_level wajib diisi', 400);
   }
+
+  // Determine subject: coordinator can specify any, regular teacher uses their own
+  const finalSubject = getSubjectForCreate(teacher, subject);
 
   const existing = await prisma.questionBank.findUnique({ where: { bank_name } });
   if (existing) {
@@ -28,7 +39,7 @@ const createQuestionBank = asyncHandler(async (req, res) => {
     data: {
       bank_name,
       description: description || null,
-      subject,
+      subject: finalSubject,
       grade_level,
       major: major || null,
       teacher_id: teacher.teacher_id,
@@ -45,7 +56,7 @@ const createQuestionBank = asyncHandler(async (req, res) => {
   res.status(201).json({ message: 'Bank soal berhasil dibuat', question_bank: bank });
 });
 
-// PUT /api/questions/bank/:id - Update Question Bank (any teacher)
+// PUT /api/questions/bank/:id - Update Question Bank
 const updateQuestionBank = asyncHandler(async (req, res) => {
   const teacher = req.teacher;
   const { id } = req.params;
@@ -56,10 +67,22 @@ const updateQuestionBank = asyncHandler(async (req, res) => {
   });
   if (!bank) throw new AppError('Bank soal tidak ditemukan', 404);
 
+  // Validate subject access
+  validateSubjectAccess(teacher, bank.subject, 'bank soal');
+
   // Check uniqueness if name is changing
   if (bank_name && bank_name !== bank.bank_name) {
     const existing = await prisma.questionBank.findUnique({ where: { bank_name } });
     if (existing) throw new AppError(`Bank soal dengan nama "${bank_name}" sudah ada`, 409);
+  }
+
+  // Validate new subject if changing (only coordinator can change to different subject)
+  let finalSubject = bank.subject;
+  if (subject && subject !== bank.subject) {
+    if (!isCoordinator(teacher)) {
+      throw new AppError('Hanya koordinator yang dapat mengubah mata pelajaran bank soal', 403);
+    }
+    finalSubject = subject;
   }
 
   const updated = await prisma.questionBank.update({
@@ -67,7 +90,7 @@ const updateQuestionBank = asyncHandler(async (req, res) => {
     data: {
       bank_name: bank_name || bank.bank_name,
       description: description !== undefined ? description : bank.description,
-      subject: subject || bank.subject,
+      subject: finalSubject,
       grade_level: grade_level || bank.grade_level,
       major: major !== undefined ? major : bank.major,
     },
@@ -83,7 +106,7 @@ const updateQuestionBank = asyncHandler(async (req, res) => {
   res.json({ message: 'Bank soal berhasil diperbarui', question_bank: updated });
 });
 
-// DELETE /api/questions/bank/:id - Delete Question Bank (any teacher)
+// DELETE /api/questions/bank/:id - Delete Question Bank
 const deleteQuestionBank = asyncHandler(async (req, res) => {
   const teacher = req.teacher;
   const { id } = req.params;
@@ -93,6 +116,9 @@ const deleteQuestionBank = asyncHandler(async (req, res) => {
     include: { _count: { select: { questions: true } } },
   });
   if (!bank) throw new AppError('Bank soal tidak ditemukan', 404);
+
+  // Validate subject access
+  validateSubjectAccess(teacher, bank.subject, 'bank soal');
 
   // B3: Prevent deleting bank with questions assigned to active exams
   const activeUsage = await prisma.examQuestion.findFirst({
@@ -160,12 +186,18 @@ const createQuestion = asyncHandler(async (req, res) => {
   });
   if (!bank) throw new AppError('Bank soal tidak ditemukan', 404);
 
+  // Validate subject access to the bank
+  validateSubjectAccess(teacher, bank.subject, 'bank soal');
+
+  // Determine subject for the question
+  const finalSubject = getSubjectForCreate(teacher, subject);
+
   const result = await prisma.$transaction(async (tx) => {
     const question = await tx.question.create({
       data: {
         question_type,
         question_text,
-        subject,
+        subject: finalSubject,
         grade_level,
         major: major || null,
         question_image: question_image || null,
@@ -199,12 +231,21 @@ const createQuestion = asyncHandler(async (req, res) => {
   res.status(201).json({ message: 'Soal berhasil dibuat', question_id: result.question_id });
 });
 
-// GET /api/questions - Get all questions (with filters and pagination, all teachers)
+// GET /api/questions - Get all questions (with filters and pagination)
 const getQuestions = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
   const { subject, grade_level, major, question_type, page: pageStr, limit: limitStr } = req.query;
 
-  const filters = {};
-  if (subject) filters.subject = subject;
+  // Build subject filter based on teacher's subject (coordinator sees all)
+  const subjectFilter = buildSubjectFilter(teacher);
+  
+  const filters = { ...subjectFilter };
+  // Allow additional subject filter from query only if coordinator or matches teacher's subject
+  if (subject) {
+    if (isCoordinator(teacher) || subject === teacher.subject) {
+      filters.subject = subject;
+    }
+  }
   if (grade_level) filters.grade_level = grade_level;
   if (major) filters.major = major;
   if (question_type) filters.question_type = question_type;
@@ -235,8 +276,9 @@ const getQuestions = asyncHandler(async (req, res) => {
   });
 });
 
-// GET /api/questions/:id - Get single question (all teachers)
+// GET /api/questions/:id - Get single question
 const getQuestionById = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
   const question = await prisma.question.findUnique({
     where: { question_id: parseInt(req.params.id) },
     include: { answer_options: true },
@@ -244,10 +286,13 @@ const getQuestionById = asyncHandler(async (req, res) => {
 
   if (!question) throw new AppError('Soal tidak ditemukan', 404);
 
+  // Validate subject access
+  validateSubjectAccess(teacher, question.subject, 'soal');
+
   res.json({ question });
 });
 
-// PUT /api/questions/:id - Update question (any teacher)
+// PUT /api/questions/:id - Update question
 const updateQuestion = asyncHandler(async (req, res) => {
   const teacher = req.teacher;
   const { id } = req.params;
@@ -258,12 +303,24 @@ const updateQuestion = asyncHandler(async (req, res) => {
   });
   if (!question) throw new AppError('Soal tidak ditemukan', 404);
 
+  // Validate subject access
+  validateSubjectAccess(teacher, question.subject, 'soal');
+
+  // Validate new subject if changing (only coordinator can change to different subject)
+  let finalSubject = question.subject;
+  if (subject && subject !== question.subject) {
+    if (!isCoordinator(teacher)) {
+      throw new AppError('Hanya koordinator yang dapat mengubah mata pelajaran soal', 403);
+    }
+    finalSubject = subject;
+  }
+
   const result = await prisma.$transaction(async (tx) => {
     const updated = await tx.question.update({
       where: { question_id: parseInt(id) },
       data: {
         question_text: question_text || question.question_text,
-        subject: subject || question.subject,
+        subject: finalSubject,
         grade_level: grade_level || question.grade_level,
         major: major !== undefined ? major : question.major,
         question_image: question_image !== undefined ? question_image : question.question_image,
@@ -313,7 +370,7 @@ const updateQuestion = asyncHandler(async (req, res) => {
   res.json({ message: 'Soal berhasil diupdate', question: result });
 });
 
-// DELETE /api/questions/:id - Delete question (any teacher)
+// DELETE /api/questions/:id - Delete question
 const deleteQuestion = asyncHandler(async (req, res) => {
   const teacher = req.teacher;
   const { id } = req.params;
@@ -322,6 +379,9 @@ const deleteQuestion = asyncHandler(async (req, res) => {
     where: { question_id: parseInt(id) },
   });
   if (!question) throw new AppError('Soal tidak ditemukan', 404);
+
+  // Validate subject access
+  validateSubjectAccess(teacher, question.subject, 'soal');
 
   // B3: Prevent deleting questions assigned to active exams
   const activeUsage = await prisma.examQuestion.findFirst({
@@ -344,9 +404,15 @@ const deleteQuestion = asyncHandler(async (req, res) => {
   res.json({ message: 'Soal berhasil dihapus' });
 });
 
-// GET /api/questions/banks - Get all question banks (all teachers)
+// GET /api/questions/banks - Get all question banks
 const getQuestionBank = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
+  
+  // Build subject filter based on teacher's subject (coordinator sees all)
+  const subjectFilter = buildSubjectFilter(teacher);
+
   const questionBanks = await prisma.questionBank.findMany({
+    where: subjectFilter,
     include: {
       teacher: { select: { teacher_id: true, full_name: true } },
       _count: { select: { questions: true } },
@@ -379,14 +445,18 @@ const getQuestionBank = asyncHandler(async (req, res) => {
   });
 });
 
-// GET /api/questions/bank/:questionBankId - Get questions by bank (all teachers)
+// GET /api/questions/bank/:questionBankId - Get questions by bank
 const getQuestionsByBank = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
   const { questionBankId } = req.params;
 
   const bank = await prisma.questionBank.findUnique({
     where: { question_bank_id: parseInt(questionBankId) },
   });
   if (!bank) throw new AppError('Bank soal tidak ditemukan', 404);
+
+  // Validate subject access
+  validateSubjectAccess(teacher, bank.subject, 'bank soal');
 
   const questions = await prisma.question.findMany({
     where: { question_bank_id: bank.question_bank_id },

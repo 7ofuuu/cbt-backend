@@ -20,6 +20,38 @@ const register = asyncHandler(async (req, res) => {
   res.status(201).json({ message: 'User berhasil didaftarkan', userId: user.id });
 });
 
+/**
+ * Format teacher profile data for response.
+ * Only includes is_coordinator if true.
+ * @param {object} teacher - Teacher record
+ * @returns {object}
+ */
+const formatTeacherProfile = (teacher) => {
+  if (!teacher) return null;
+  const profile = {
+    teacher_id: teacher.teacher_id,
+    full_name: teacher.full_name,
+    nip: teacher.nip,
+    subject: teacher.subject,
+  };
+  if (teacher.is_coordinator) {
+    profile.is_coordinator = true;
+  }
+  return profile;
+};
+
+/**
+ * Get profile data based on user role.
+ * @param {object} user - User with included profiles
+ * @returns {object|null}
+ */
+const getProfileData = (user) => {
+  if (user.role === 'student') return user.student;
+  if (user.role === 'teacher') return formatTeacherProfile(user.teacher);
+  if (user.role === 'admin') return user.admin;
+  return null;
+};
+
 // POST /api/auth/login
 const login = asyncHandler(async (req, res) => {
   const { username, password } = req.body;
@@ -40,10 +72,7 @@ const login = asyncHandler(async (req, res) => {
 
   if (!user.is_active) throw new AppError('Akun dinonaktifkan', 403);
 
-  let profileData = null;
-  if (user.role === 'student') profileData = user.student;
-  else if (user.role === 'teacher') profileData = user.teacher;
-  else if (user.role === 'admin') profileData = user.admin;
+  const profileData = getProfileData(user);
 
   const token = jwt.sign(
     { id: user.id, role: user.role, is_super_admin: user.is_super_admin || false },
@@ -82,10 +111,7 @@ const me = asyncHandler(async (req, res) => {
 
   if (!user) throw new AppError('User tidak ditemukan', 404);
 
-  let profileData = null;
-  if (user.role === 'student') profileData = user.student;
-  else if (user.role === 'teacher') profileData = user.teacher;
-  else if (user.role === 'admin') profileData = user.admin;
+  const profileData = getProfileData(user);
 
   res.json({
     message: 'Profile fetched',

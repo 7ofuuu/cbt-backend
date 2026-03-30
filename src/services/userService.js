@@ -87,11 +87,17 @@ const validateClassroomConsistency = (classroom, gradeLevel, major) => {
  * @param {string} [params.major] - Required for students
  * @param {string} [params.nisn] - Optional for students
  * @param {string} [params.nip] - Optional for teachers
+ * @param {string} [params.subject] - Required for teachers
+ * @param {boolean} [params.is_coordinator] - Optional for teachers (default false)
  * @param {import('@prisma/client').PrismaClient} [tx] - Optional transaction client
  * @returns {Promise<object>} Created user
  */
 const createUserWithProfile = async (params, tx = prisma) => {
-  const { username, password, role, full_name, classroom, grade_level, major, nisn, nip } = params;
+  const { 
+    username, password, role, full_name, 
+    classroom, grade_level, major, nisn, 
+    nip, subject, is_coordinator 
+  } = params;
 
   const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
@@ -126,10 +132,15 @@ const createUserWithProfile = async (params, tx = prisma) => {
         },
       });
     } else if (role === 'teacher') {
+      if (!subject) {
+        throw new AppError('Mata pelajaran (subject) wajib diisi untuk guru', 400);
+      }
       await client.teacher.create({
         data: {
           user_id: newUser.id,
           full_name,
+          subject,
+          is_coordinator: is_coordinator ?? false,
           ...(nip !== undefined && { nip }),
         },
       });
@@ -189,6 +200,7 @@ const paginatedResponse = (data, total, page, limit) => ({
 
 /**
  * Format user data consistently for API responses.
+ * For teachers: includes subject and is_coordinator (only if true).
  * @param {object} user - User with included role profiles
  * @returns {object}
  */
@@ -216,12 +228,18 @@ const formatUserData = (user) => {
   }
 
   if (user.role === 'teacher' && user.teacher) {
-    return {
+    const teacherData = {
       ...base,
       full_name: user.teacher.full_name,
       nip: user.teacher.nip,
+      subject: user.teacher.subject,
       teacher_id: user.teacher.teacher_id,
     };
+    // Only include is_coordinator if true
+    if (user.teacher.is_coordinator) {
+      teacherData.is_coordinator = true;
+    }
+    return teacherData;
   }
 
   if (user.role === 'admin' && user.admin) {

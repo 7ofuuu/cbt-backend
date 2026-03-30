@@ -2,14 +2,20 @@
  * Exam Controller - Refactored
  * Uses asyncHandler, resolveTeacher middleware, and examService.
  * Teacher lookup eliminated via req.teacher from middleware.
- * N+1 in updateWeightMultiple fixed with batch transaction.
- * Pagination added to getExams.
+ * Subject-based access control: teachers only see/modify their subject's exams.
+ * Coordinators have full access to all exams.
  */
 const prisma = require('../config/db');
 const { asyncHandler, AppError } = require('../utils/asyncHandler');
 const { getTeacherExam, getExamOrFail, guardExamStatus, batchUpdateWeights, getQuestionsByBank, shuffleArray } = require('../services/examService');
 const { buildPagination, paginatedResponse } = require('../services/userService');
 const activityLogService = require('../services/activityLogService');
+const { 
+  validateSubjectAccess, 
+  buildSubjectFilter, 
+  getSubjectForCreate,
+  isCoordinator,
+} = require('../services/subjectAccessService');
 
 // POST /api/exams - Create exam with optional auto-assign students
 const createExam = asyncHandler(async (req, res) => {
@@ -20,9 +26,12 @@ const createExam = asyncHandler(async (req, res) => {
   } = req.body;
 
   // Validate required fields
-  if (!exam_name || !subject || !grade_level || !start_date || !end_date || !duration_minutes) {
-    throw new AppError('exam_name, subject, grade_level, start_date, end_date, dan duration_minutes wajib diisi', 400);
+  if (!exam_name || !grade_level || !start_date || !end_date || !duration_minutes) {
+    throw new AppError('exam_name, grade_level, start_date, end_date, dan duration_minutes wajib diisi', 400);
   }
+
+  // Determine subject: coordinator can specify any, regular teacher uses their own
+  const finalSubject = getSubjectForCreate(teacher, subject);
 
   // B8: Validate duration_minutes is a positive integer
   const dur = parseInt(duration_minutes);
@@ -41,7 +50,7 @@ const createExam = asyncHandler(async (req, res) => {
     const exam = await tx.exam.create({
       data: {
         exam_name,
-        subject,
+        subject: finalSubject,
         grade_level,
         major: major || null,
         start_date: startDate,
@@ -89,11 +98,14 @@ const createExam = asyncHandler(async (req, res) => {
   });
 });
 
-// GET /api/exams - Get all exams with pagination (all teachers can view)
+// GET /api/exams - Get all exams with pagination
 const getExams = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
   const { skip, take, page, limit } = buildPagination(req.query, 20);
 
-  const where = {};
+  // Build subject filter based on teacher's subject (coordinator sees all)
+  const subjectFilter = buildSubjectFilter(teacher);
+  const where = { ...subjectFilter };
 
   const [exams, total] = await Promise.all([
     prisma.exam.findMany({
@@ -119,8 +131,9 @@ const getExams = asyncHandler(async (req, res) => {
   res.json(paginatedResponse(exams, total, page, limit));
 });
 
-// GET /api/exams/:id - Get exam by ID (all teachers can view)
+// GET /api/exams/:id - Get exam by ID
 const getExamById = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
   const exam = await getExamOrFail(req.params.id, {
     include: {
       teacher: {
@@ -140,13 +153,19 @@ const getExamById = asyncHandler(async (req, res) => {
     },
   });
 
+  // Validate subject access
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
+
   res.json({ exam });
 });
 
-// PUT /api/exams/:id - Update exam (any teacher can update)
+// PUT /api/exams/:id - Update exam
 const updateExam = asyncHandler(async (req, res) => {
   const teacher = req.teacher;
   const exam = await getExamOrFail(req.params.id);
+
+  // Validate subject access
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
 
   guardExamStatus(exam);
 
@@ -154,6 +173,15 @@ const updateExam = asyncHandler(async (req, res) => {
     exam_name, subject, grade_level, major, start_date, end_date,
     duration_minutes, is_shuffle_questions,
   } = req.body;
+
+  // Validate new subject if changing (only coordinator can change to different subject)
+  let finalSubject = exam.subject;
+  if (subject && subject !== exam.subject) {
+    if (!isCoordinator(teacher)) {
+      throw new AppError('Hanya koordinator yang dapat mengubah mata pelajaran ujian', 403);
+    }
+    finalSubject = subject;
+  }
 
   // Validate dates if provided
   if (start_date && end_date) {
@@ -181,7 +209,7 @@ const updateExam = asyncHandler(async (req, res) => {
     where: { exam_id: exam.exam_id },
     data: {
       ...(exam_name && { exam_name }),
-      ...(subject && { subject }),
+      subject: finalSubject,
       ...(grade_level && { grade_level }),
       ...(major !== undefined && { major: major || null }),
       ...(start_date && { start_date: new Date(start_date) }),
@@ -202,10 +230,13 @@ const updateExam = asyncHandler(async (req, res) => {
   res.json({ message: 'Ujian berhasil diperbarui', exam: updated });
 });
 
-// DELETE /api/exams/:id - Delete exam (any teacher can delete)
+// DELETE /api/exams/:id - Delete exam
 const deleteExam = asyncHandler(async (req, res) => {
   const teacher = req.teacher;
   const exam = await getExamOrFail(req.params.id);
+
+  // Validate subject access
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
 
   if (exam.exam_status === 'ONGOING') {
     throw new AppError('Tidak dapat menghapus ujian yang sedang berlangsung', 400);
@@ -247,6 +278,9 @@ const assignQuestionToExam = asyncHandler(async (req, res) => {
     include: { exam_questions: { orderBy: { sequence: 'desc' }, take: 1 } },
   });
 
+  // Validate subject access to the exam
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
+
   guardExamStatus(exam);
 
   // Verify question exists
@@ -254,6 +288,9 @@ const assignQuestionToExam = asyncHandler(async (req, res) => {
     where: { question_id: parseInt(question_id) },
   });
   if (!question) throw new AppError('Soal tidak ditemukan', 404);
+
+  // Validate subject access to the question
+  validateSubjectAccess(teacher, question.subject, 'soal');
 
   const lastSequence = exam.exam_questions.length > 0 ? exam.exam_questions[0].sequence : 0;
 
@@ -282,7 +319,17 @@ const assignBankToExam = asyncHandler(async (req, res) => {
     include: { exam_questions: { orderBy: { sequence: 'desc' }, take: 1 } },
   });
 
+  // Validate subject access to the exam
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
+
   guardExamStatus(exam);
+
+  // Verify bank exists and validate access
+  const bank = await prisma.questionBank.findUnique({
+    where: { question_bank_id: parseInt(question_bank_id) },
+  });
+  if (!bank) throw new AppError('Bank soal tidak ditemukan', 404);
+  validateSubjectAccess(teacher, bank.subject, 'bank soal');
 
   let questions = await prisma.question.findMany({
     where: { question_bank_id: parseInt(question_bank_id) },
@@ -325,6 +372,7 @@ const assignBankToExam = asyncHandler(async (req, res) => {
 
 // POST /api/exams/remove-questions - Remove multiple questions from exam
 const removeMultipleQuestions = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
   const { exam_id, exam_question_ids } = req.body;
 
   if (!exam_id || !Array.isArray(exam_question_ids) || exam_question_ids.length === 0) {
@@ -332,6 +380,10 @@ const removeMultipleQuestions = asyncHandler(async (req, res) => {
   }
 
   const exam = await getExamOrFail(exam_id);
+  
+  // Validate subject access
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
+  
   guardExamStatus(exam);
 
   const result = await prisma.examQuestion.deleteMany({
@@ -346,6 +398,7 @@ const removeMultipleQuestions = asyncHandler(async (req, res) => {
 
 // POST /api/exams/remove-bank - Remove all questions from a bank from exam
 const removeBankFromExam = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
   const { exam_id, question_bank_id } = req.body;
 
   if (!exam_id || !question_bank_id) {
@@ -353,6 +406,10 @@ const removeBankFromExam = asyncHandler(async (req, res) => {
   }
 
   const exam = await getExamOrFail(exam_id);
+  
+  // Validate subject access
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
+  
   guardExamStatus(exam);
 
   const bankQuestions = await prisma.question.findMany({
@@ -372,7 +429,11 @@ const removeBankFromExam = asyncHandler(async (req, res) => {
 
 // DELETE /api/exams/:id/clear-questions - Clear all questions from exam
 const clearAllQuestions = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
   const exam = await getExamOrFail(parseInt(req.params.id));
+
+  // Validate subject access
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
 
   guardExamStatus(exam);
 
@@ -385,17 +446,28 @@ const clearAllQuestions = asyncHandler(async (req, res) => {
 
 // GET /api/exams/:id/questions-by-bank - Get questions grouped by bank
 const getQuestionsByBankHandler = asyncHandler(async (req, res) => {
-  const result = await getQuestionsByBank(parseInt(req.params.id));
+  const teacher = req.teacher;
+  const exam = await getExamOrFail(parseInt(req.params.id));
+  
+  // Validate subject access
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
+  
+  const result = await getQuestionsByBank(exam.exam_id);
   res.json(result);
 });
 
-// PUT /api/exams/update-weight - Batch update question weights (fixed N+1)
+// PUT /api/exams/update-weight - Batch update question weights
 const updateWeightMultiple = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
   const { exam_id, updates } = req.body;
 
   if (!exam_id) throw new AppError('exam_id wajib diisi', 400);
 
   const exam = await getExamOrFail(exam_id);
+  
+  // Validate subject access
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
+  
   guardExamStatus(exam);
 
   const count = await batchUpdateWeights(updates);
@@ -405,10 +477,15 @@ const updateWeightMultiple = asyncHandler(async (req, res) => {
 
 // DELETE /api/exams/:examId/questions/:questionId - Remove single question from exam
 const removeQuestionFromExam = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
   const examId = parseInt(req.params.examId);
   const questionId = parseInt(req.params.questionId);
 
   const exam = await getExamOrFail(examId);
+  
+  // Validate subject access
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
+  
   guardExamStatus(exam);
 
   const result = await prisma.examQuestion.deleteMany({
@@ -427,13 +504,17 @@ const removeQuestionFromExam = asyncHandler(async (req, res) => {
 
 // POST /api/exams/assign-students - Assign students by grade/major
 const assignStudentToExam = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
   const { exam_id, grade_level, major } = req.body;
 
   if (!exam_id || !grade_level) {
     throw new AppError('exam_id dan grade_level wajib diisi', 400);
   }
 
-  await getExamOrFail(exam_id);
+  const exam = await getExamOrFail(exam_id);
+  
+  // Validate subject access
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
 
   const studentFilter = { grade_level };
   if (major) studentFilter.major = major;
@@ -471,6 +552,10 @@ const reassignStudents = asyncHandler(async (req, res) => {
   }
 
   const exam = await getExamOrFail(exam_id);
+  
+  // Validate subject access
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
+  
   guardExamStatus(exam);
 
   const result = await prisma.$transaction(async (tx) => {

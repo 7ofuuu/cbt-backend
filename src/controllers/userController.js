@@ -93,7 +93,7 @@ const getUserDetail = asyncHandler(async (req, res) => {
 // PUT /api/users/:id - Update user
 const updateUser = asyncHandler(async (req, res) => {
   const userId = parseInt(req.params.id);
-  const { username, password, full_name, classroom, grade_level, major, nisn, nip } = req.body;
+  const { username, password, full_name, classroom, grade_level, major, nisn, nip, subject, is_coordinator } = req.body;
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -149,6 +149,8 @@ const updateUser = asyncHandler(async (req, res) => {
       const teacherData = {};
       if (full_name !== undefined) teacherData.full_name = full_name;
       if (nip !== undefined) teacherData.nip = nip;
+      if (subject !== undefined) teacherData.subject = subject;
+      if (is_coordinator !== undefined) teacherData.is_coordinator = is_coordinator;
       if (Object.keys(teacherData).length > 0) {
         await tx.teacher.update({
           where: { teacher_id: user.teacher.teacher_id },
@@ -176,7 +178,7 @@ const updateUser = asyncHandler(async (req, res) => {
 
 // POST /api/users - Create user (uses userService)
 const createUser = asyncHandler(async (req, res) => {
-  const { username, password, role, full_name, classroom, grade_level, major, nisn, nip } = req.body;
+  const { username, password, role, full_name, classroom, grade_level, major, nisn, nip, subject, is_coordinator } = req.body;
 
   if (!username || !password || !role || !full_name) {
     throw new AppError('username, password, role, dan full_name wajib diisi', 400);
@@ -191,8 +193,12 @@ const createUser = asyncHandler(async (req, res) => {
     throw new AppError('classroom wajib diisi untuk siswa', 400);
   }
 
+  if (role === 'teacher' && !subject) {
+    throw new AppError('subject (mata pelajaran) wajib diisi untuk guru', 400);
+  }
+
   const user = await createUserWithProfile({
-    username, password, role, full_name, classroom, grade_level, major, nisn, nip,
+    username, password, role, full_name, classroom, grade_level, major, nisn, nip, subject, is_coordinator,
   });
 
   res.status(201).json({ message: 'User berhasil dibuat', userId: user.id });

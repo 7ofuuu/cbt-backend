@@ -7,7 +7,7 @@
  *   router.get('/path', verifyToken, resolveStudent, handler);
  *
  * After middleware runs:
- *   req.teacher = { teacher_id, full_name, ... }
+ *   req.teacher = { teacher_id, full_name, subject, is_coordinator, ... }
  *   req.student = { student_id, full_name, ... }
  */
 const prisma = require('../config/db');
@@ -15,12 +15,20 @@ const { AppError } = require('../utils/asyncHandler');
 
 /**
  * Resolves teacher profile from req.user.id.
- * Sets req.teacher with teacher record.
+ * Sets req.teacher with teacher record including subject and is_coordinator.
  */
 const resolveTeacher = async (req, _res, next) => {
   try {
     const teacher = await prisma.teacher.findUnique({
       where: { user_id: req.user.id },
+      select: {
+        teacher_id: true,
+        full_name: true,
+        nip: true,
+        subject: true,
+        is_coordinator: true,
+        user_id: true,
+      },
     });
 
     if (!teacher) {

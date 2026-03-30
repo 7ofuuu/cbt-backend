@@ -73,6 +73,13 @@ const registerSchema = Joi.object({
   // Optional unique identifiers
   nisn: Joi.when('role', { is: 'student', then: Joi.string().allow('', null).optional() }),
   nip: Joi.when('role', { is: 'teacher', then: Joi.string().allow('', null).optional() }),
+
+  // Teacher-specific fields
+  subject: Joi.when('role', { is: 'teacher', then: Joi.string().required().messages({
+    'any.required': 'Mata pelajaran (subject) wajib diisi untuk guru',
+    'string.empty': 'Mata pelajaran (subject) tidak boleh kosong',
+  }) }),
+  is_coordinator: Joi.when('role', { is: 'teacher', then: Joi.boolean().optional() }),
 });
 
 const validateRegister = (req, res, next) => {
