@@ -19,6 +19,21 @@ const {
 const { calculateAndSaveResult } = require('../services/scoreService');
 const activityLogService = require('../services/activityLogService');
 
+const parseBooleanLike = (value, fieldName = 'boolean') => {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'ya'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'tidak'].includes(normalized)) return false;
+  }
+  throw new AppError(`${fieldName} harus bernilai boolean`, 400);
+};
+
 // ==================== USER LISTING (consolidated pagination) ====================
 
 /**
@@ -94,6 +109,7 @@ const getUserDetail = asyncHandler(async (req, res) => {
 const updateUser = asyncHandler(async (req, res) => {
   const userId = parseInt(req.params.id);
   const { username, password, full_name, classroom, grade_level, major, nisn, nip, subject, is_coordinator } = req.body;
+  const normalizedCoordinator = parseBooleanLike(is_coordinator, 'is_coordinator');
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -150,7 +166,7 @@ const updateUser = asyncHandler(async (req, res) => {
       if (full_name !== undefined) teacherData.full_name = full_name;
       if (nip !== undefined) teacherData.nip = nip;
       if (subject !== undefined) teacherData.subject = subject;
-      if (is_coordinator !== undefined) teacherData.is_coordinator = is_coordinator;
+      if (normalizedCoordinator !== undefined) teacherData.is_coordinator = normalizedCoordinator;
       if (Object.keys(teacherData).length > 0) {
         await tx.teacher.update({
           where: { teacher_id: user.teacher.teacher_id },
@@ -179,6 +195,7 @@ const updateUser = asyncHandler(async (req, res) => {
 // POST /api/users - Create user (uses userService)
 const createUser = asyncHandler(async (req, res) => {
   const { username, password, role, full_name, classroom, grade_level, major, nisn, nip, subject, is_coordinator } = req.body;
+  const normalizedCoordinator = parseBooleanLike(is_coordinator, 'is_coordinator');
 
   if (!username || !password || !role || !full_name) {
     throw new AppError('username, password, role, dan full_name wajib diisi', 400);
@@ -198,7 +215,17 @@ const createUser = asyncHandler(async (req, res) => {
   }
 
   const user = await createUserWithProfile({
-    username, password, role, full_name, classroom, grade_level, major, nisn, nip, subject, is_coordinator,
+    username,
+    password,
+    role,
+    full_name,
+    classroom,
+    grade_level,
+    major,
+    nisn,
+    nip,
+    subject,
+    is_coordinator: normalizedCoordinator,
   });
 
   res.status(201).json({ message: 'User berhasil dibuat', userId: user.id });
@@ -207,7 +234,7 @@ const createUser = asyncHandler(async (req, res) => {
 // PUT /api/users/:id/role - Update user role
 const updateUserRole = asyncHandler(async (req, res) => {
   const userId = parseInt(req.params.id);
-  const { new_role } = req.body;
+  const { new_role, teacher_subject, teacher_nip, teacher_is_coordinator } = req.body;
 
   if (!new_role) throw new AppError('new_role wajib diisi', 400);
 
@@ -215,6 +242,12 @@ const updateUserRole = asyncHandler(async (req, res) => {
   if (!validRoles.includes(new_role)) {
     throw new AppError(`new_role harus salah satu dari: ${validRoles.join(', ')}`, 400);
   }
+
+  if (new_role === 'teacher' && !teacher_subject) {
+    throw new AppError('teacher_subject wajib diisi saat mengubah role ke teacher', 400);
+  }
+
+  const normalizedTeacherCoordinator = parseBooleanLike(teacher_is_coordinator, 'teacher_is_coordinator');
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -243,7 +276,15 @@ const updateUserRole = asyncHandler(async (req, res) => {
     if (new_role === 'admin') {
       await tx.admin.create({ data: { user_id: userId, full_name: fullName } });
     } else if (new_role === 'teacher') {
-      await tx.teacher.create({ data: { user_id: userId, full_name: fullName } });
+      await tx.teacher.create({
+        data: {
+          user_id: userId,
+          full_name: fullName,
+          subject: teacher_subject,
+          ...(teacher_nip !== undefined && teacher_nip !== '' && { nip: teacher_nip }),
+          ...(normalizedTeacherCoordinator !== undefined && { is_coordinator: normalizedTeacherCoordinator }),
+        },
+      });
     } else if (new_role === 'student') {
       await tx.student.create({
         data: { user_id: userId, full_name: fullName, classroom: '', grade_level: '', major: '' },
@@ -394,7 +435,14 @@ const batchCreateUsers = asyncHandler(async (req, res) => {
         continue;
       }
 
-      const user = await createUserWithProfile(userData);
+      const normalizedUserData = { ...userData };
+      normalizedUserData.is_coordinator = parseBooleanLike(userData.is_coordinator, 'is_coordinator');
+
+      if (normalizedUserData.role === 'teacher' && !normalizedUserData.subject) {
+        throw new AppError('subject (mata pelajaran) wajib diisi untuk guru', 400);
+      }
+
+      const user = await createUserWithProfile(normalizedUserData);
       results.success.push({ username: user.username, id: user.id });
     } catch (error) {
       results.failed.push(userData.username || 'unknown');

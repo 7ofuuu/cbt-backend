@@ -280,7 +280,7 @@ async function main() {
           const question = await prisma.question.create({
             data: {
               question_type: 'SINGLE_CHOICE',
-              question_text: `[${gradeLevel}-${majorItem}] ${template.text}`,
+              question_text: template.text,
               subject: subjectName,
               grade_level: gradeLevel,
               major: majorItem,
@@ -308,7 +308,7 @@ async function main() {
           const question = await prisma.question.create({
             data: {
               question_type: 'MULTIPLE_CHOICE',
-              question_text: `[${gradeLevel}-${majorItem}] [MULTIPLE] ${template.text} (Pilih semua yang benar)`,
+              question_text: `${template.text} (Pilih semua yang benar)`,
               subject: subjectName,
               grade_level: gradeLevel,
               major: majorItem,
@@ -333,7 +333,7 @@ async function main() {
           const question = await prisma.question.create({
             data: {
               question_type: 'ESSAY',
-              question_text: `[${gradeLevel}-${majorItem}] Jelaskan secara detail tentang konsep ${subjectName} terkait topik ${i + 1}. Berikan contoh dan analisis yang mendalam.`,
+              question_text: `Jelaskan secara detail tentang konsep ${subjectName} terkait topik ${i + 1}. Berikan contoh dan analisis yang mendalam.`,
               subject: subjectName,
               grade_level: gradeLevel,
               major: majorItem,

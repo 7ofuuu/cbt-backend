@@ -49,12 +49,20 @@ npm install
 
 ### Environment Variables
 
-Create a `.env` file in the project root:
+Copy `.env.example` to `.env`:
+
+```bash
+# PowerShell
+Copy-Item .env.example .env
+```
+
+or create `.env` manually:
 
 ```env
 DATABASE_URL="mysql://username:password@localhost:3306/cbt_database"
 PORT=3000
 JWT_SECRET=your_secret_key_here
+CORS_ORIGINS="http://localhost:3001,http://localhost:3000"
 ```
 
 ### Database Setup
@@ -69,6 +77,8 @@ npx prisma db push
 # Seed sample data (optional)
 npx prisma db seed
 ```
+
+If `prisma migrate dev` reports migration drift in local development, use `prisma db push` for schema sync, then run seed again.
 
 **Seed data creates:** 3 Admins (1 Super Admin), 8 Teachers, 108 Students, 36 Question Banks, 720 Questions, 13 Exams, ~156 Exam Participants, ~510 Answers, 25 Exam Results, ~142 Activity Logs.
 
@@ -90,11 +100,16 @@ Server runs at `http://localhost:3000`. On startup, two schedulers automatically
 ### Useful Commands
 
 ```bash
+npm run lint              # Syntax check all backend JavaScript files
+npm run check             # Alias for lint (quick local health check)
+npm run cleanup:question-text-tags # Remove legacy [XII-IPS]/[MULTIPLE] prefixes from question_text
 npx prisma studio          # GUI database browser
 npx prisma db push --force-reset  # Reset database (delete all data + recreate)
 npx prisma db seed          # Re-seed sample data
 npx prisma generate         # Regenerate client after schema changes
 ```
+
+After `db push --force-reset`, run seed and login again in dashboard because old JWT sessions become invalid.
 
 ## Coding Standards
 

@@ -7,7 +7,7 @@
  */
 const prisma = require('../config/db');
 const { asyncHandler, AppError } = require('../utils/asyncHandler');
-const { getTeacherExam, getExamOrFail, guardExamStatus, batchUpdateWeights, getQuestionsByBank, shuffleArray } = require('../services/examService');
+const { getExamOrFail, guardExamStatus, batchUpdateWeights, getQuestionsByBank, shuffleArray } = require('../services/examService');
 const { buildPagination, paginatedResponse } = require('../services/userService');
 const activityLogService = require('../services/activityLogService');
 const { 
@@ -292,6 +292,17 @@ const assignQuestionToExam = asyncHandler(async (req, res) => {
   // Validate subject access to the question
   validateSubjectAccess(teacher, question.subject, 'soal');
 
+  // Prevent assigning question with incompatible exam dimensions.
+  if (question.subject !== exam.subject) {
+    throw new AppError('Soal harus memiliki mata pelajaran yang sama dengan ujian', 400);
+  }
+  if (question.grade_level !== exam.grade_level) {
+    throw new AppError('Soal harus memiliki tingkat yang sama dengan ujian', 400);
+  }
+  if (exam.major && question.major !== exam.major) {
+    throw new AppError('Soal harus memiliki jurusan yang sama dengan ujian', 400);
+  }
+
   const lastSequence = exam.exam_questions.length > 0 ? exam.exam_questions[0].sequence : 0;
 
   const examQuestion = await prisma.examQuestion.create({
@@ -330,6 +341,17 @@ const assignBankToExam = asyncHandler(async (req, res) => {
   });
   if (!bank) throw new AppError('Bank soal tidak ditemukan', 404);
   validateSubjectAccess(teacher, bank.subject, 'bank soal');
+
+  // Ensure bank dimensions are compatible with exam dimensions.
+  if (bank.subject !== exam.subject) {
+    throw new AppError('Bank soal harus memiliki mata pelajaran yang sama dengan ujian', 400);
+  }
+  if (bank.grade_level !== exam.grade_level) {
+    throw new AppError('Bank soal harus memiliki tingkat yang sama dengan ujian', 400);
+  }
+  if (exam.major && bank.major !== exam.major) {
+    throw new AppError('Bank soal harus memiliki jurusan yang sama dengan ujian', 400);
+  }
 
   let questions = await prisma.question.findMany({
     where: { question_bank_id: parseInt(question_bank_id) },

@@ -4,7 +4,12 @@
  * Subject-based access control applied.
  */
 const { asyncHandler, AppError } = require('../utils/asyncHandler');
-const { getQuestionStatistics, getDashboardSummary } = require('../services/analyticsService');
+const {
+  getQuestionStatistics,
+  getDashboardSummary,
+  getTeacherPerformanceOverview,
+  getAdminAuditOverview,
+} = require('../services/analyticsService');
 const { buildPagination } = require('../services/userService');
 
 /**
@@ -60,7 +65,38 @@ const getDashboardStats = asyncHandler(async (req, res) => {
   res.json(summary);
 });
 
+/**
+ * GET /api/analytics/teacher-performance
+ * Interactive analytics payload for teacher dashboard.
+ */
+const getTeacherPerformanceOverviewHandler = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
+  const { days, subject, exam_id } = req.query;
+
+  const overview = await getTeacherPerformanceOverview(teacher, { days, subject, exam_id });
+
+  res.json(overview);
+});
+
+/**
+ * GET /api/analytics/coordinator-audit
+ * Coordinator-only audit overview (cross-subject).
+ */
+const getCoordinatorAuditOverviewHandler = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
+
+  if (!teacher?.is_coordinator) {
+    throw new AppError('Fitur audit hanya untuk guru koordinator', 403);
+  }
+
+  const { days, limit } = req.query;
+  const overview = await getAdminAuditOverview({ days, limit });
+  res.json(overview);
+});
+
 module.exports = {
   getQuestionStats,
   getDashboardStats,
+  getTeacherPerformanceOverviewHandler,
+  getCoordinatorAuditOverviewHandler,
 };

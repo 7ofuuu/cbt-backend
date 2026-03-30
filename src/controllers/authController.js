@@ -128,10 +128,21 @@ const me = asyncHandler(async (req, res) => {
 // PATCH /api/auth/profile
 const updateProfile = asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  const { full_name, classroom, grade_level, major, nisn, nip } = req.body;
+  const { username, full_name, classroom, grade_level, major, nisn, nip } = req.body;
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new AppError('User tidak ditemukan', 404);
+
+  if (username && username !== user.username) {
+    const existingUsername = await prisma.user.findUnique({ where: { username } });
+    if (existingUsername) {
+      throw new AppError('Username sudah digunakan', 409);
+    }
+    await prisma.user.update({
+      where: { id: userId },
+      data: { username },
+    });
+  }
 
   if (user.role === 'student') {
     const student = await prisma.student.findUnique({ where: { user_id: userId } });
@@ -173,15 +184,13 @@ const updateProfile = asyncHandler(async (req, res) => {
     include: { student: true, teacher: true, admin: true },
   });
 
-  let profileData = null;
-  if (freshUser.role === 'student') profileData = freshUser.student;
-  else if (freshUser.role === 'teacher') profileData = freshUser.teacher;
-  else if (freshUser.role === 'admin') profileData = freshUser.admin;
+  const profileData = getProfileData(freshUser);
 
   res.json({
     message: 'Profile updated',
     user: {
       id: freshUser.id,
+      username: freshUser.username,
       role: freshUser.role,
       is_super_admin: freshUser.is_super_admin || false,
       profile: profileData,

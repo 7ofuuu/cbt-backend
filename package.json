@@ -5,8 +5,12 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon index.js",
+    "start": "node index.js",
+    "lint": "node scripts/lintSyntax.js",
+    "check": "npm run lint",
     "postinstall": "prisma generate",
-    "seed": "node prisma/seed.js"
+    "seed": "node prisma/seed.js",
+    "cleanup:question-text-tags": "node scripts/cleanupQuestionTextTags.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

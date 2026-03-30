@@ -61,6 +61,9 @@ const validateSubjectAccess = (teacher, resourceSubject, resourceType = 'resourc
  */
 const buildSubjectFilter = (teacher, fieldName = 'subject') => {
   if (isCoordinator(teacher)) return {};
+  if (!teacher?.subject) {
+    throw new AppError('Profil guru belum memiliki mata pelajaran', 400);
+  }
   return { [fieldName]: teacher.subject };
 };
 
@@ -75,7 +78,13 @@ const buildSubjectFilter = (teacher, fieldName = 'subject') => {
 const getSubjectForCreate = (teacher, requestedSubject) => {
   if (isCoordinator(teacher)) {
     // Coordinator can specify any subject, or use their own as default
+    if (!requestedSubject && !teacher?.subject) {
+      throw new AppError('Mata pelajaran wajib diisi untuk koordinator tanpa mapel default', 400);
+    }
     return requestedSubject || teacher.subject;
+  }
+  if (!teacher?.subject) {
+    throw new AppError('Profil guru belum memiliki mata pelajaran', 400);
   }
   // Regular teacher must use their own subject
   if (requestedSubject && requestedSubject !== teacher.subject) {

@@ -167,6 +167,9 @@ const createQuestion = asyncHandler(async (req, res) => {
   if (!question_type || !validTypes.includes(question_type)) {
     throw new AppError(`question_type harus salah satu dari: ${validTypes.join(', ')}`, 400);
   }
+  if (!question_text) {
+    throw new AppError('question_text wajib diisi', 400);
+  }
 
   if (question_type !== 'ESSAY') {
     if (!answer_options || !Array.isArray(answer_options) || answer_options.length < 2) {
@@ -189,17 +192,27 @@ const createQuestion = asyncHandler(async (req, res) => {
   // Validate subject access to the bank
   validateSubjectAccess(teacher, bank.subject, 'bank soal');
 
-  // Determine subject for the question
-  const finalSubject = getSubjectForCreate(teacher, subject);
+  // Keep question dimensions aligned with its bank to avoid mixed bank metadata.
+  if (subject && subject !== bank.subject) {
+    throw new AppError('Mata pelajaran soal harus sama dengan mata pelajaran bank soal', 400);
+  }
+  if (grade_level && grade_level !== bank.grade_level) {
+    throw new AppError('Tingkat soal harus sama dengan tingkat bank soal', 400);
+  }
+  const requestedMajor = major ?? null;
+  const bankMajor = bank.major ?? null;
+  if (major !== undefined && requestedMajor !== bankMajor) {
+    throw new AppError('Jurusan soal harus sama dengan jurusan bank soal', 400);
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     const question = await tx.question.create({
       data: {
         question_type,
         question_text,
-        subject: finalSubject,
-        grade_level,
-        major: major || null,
+        subject: bank.subject,
+        grade_level: bank.grade_level,
+        major: bankMajor,
         question_image: question_image || null,
         question_explanation: question_explanation || null,
         teacher_id: teacher.teacher_id,
@@ -300,6 +313,11 @@ const updateQuestion = asyncHandler(async (req, res) => {
 
   const question = await prisma.question.findUnique({
     where: { question_id: parseInt(id) },
+    include: {
+      question_bank: {
+        select: { subject: true, grade_level: true, major: true },
+      },
+    },
   });
   if (!question) throw new AppError('Soal tidak ditemukan', 404);
 
@@ -314,6 +332,21 @@ const updateQuestion = asyncHandler(async (req, res) => {
     }
     finalSubject = subject;
   }
+  if (finalSubject !== question.question_bank.subject) {
+    throw new AppError('Mata pelajaran soal harus sama dengan mata pelajaran bank soal', 400);
+  }
+
+  const finalGradeLevel = grade_level || question.grade_level;
+  if (finalGradeLevel !== question.question_bank.grade_level) {
+    throw new AppError('Tingkat soal harus sama dengan tingkat bank soal', 400);
+  }
+
+  const finalMajor = major !== undefined ? major : question.major;
+  const normalizedFinalMajor = finalMajor ?? null;
+  const normalizedBankMajor = question.question_bank.major ?? null;
+  if (normalizedFinalMajor !== normalizedBankMajor) {
+    throw new AppError('Jurusan soal harus sama dengan jurusan bank soal', 400);
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     const updated = await tx.question.update({
@@ -321,8 +354,8 @@ const updateQuestion = asyncHandler(async (req, res) => {
       data: {
         question_text: question_text || question.question_text,
         subject: finalSubject,
-        grade_level: grade_level || question.grade_level,
-        major: major !== undefined ? major : question.major,
+        grade_level: finalGradeLevel,
+        major: normalizedFinalMajor,
         question_image: question_image !== undefined ? question_image : question.question_image,
         question_explanation: question_explanation !== undefined ? question_explanation : question.question_explanation,
       },
@@ -482,8 +515,9 @@ const getQuestionsByBank = asyncHandler(async (req, res) => {
   });
 });
 
-// GET /api/questions/available/:exam_id - Get available questions for exam (all teachers)
+// GET /api/questions/available/:exam_id - Get available questions for exam (subject-based access)
 const getAvailableQuestionsForExam = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
   const { exam_id } = req.params;
 
   const exam = await prisma.exam.findUnique({
@@ -491,6 +525,9 @@ const getAvailableQuestionsForExam = asyncHandler(async (req, res) => {
     include: { exam_questions: { select: { question_id: true } } },
   });
   if (!exam) throw new AppError('Ujian tidak ditemukan', 404);
+
+  // Validate subject access to the exam
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
 
   const filters = {
     subject: exam.subject,
@@ -524,7 +561,7 @@ const getAvailableQuestionsForExam = asyncHandler(async (req, res) => {
   });
 });
 
-// POST /api/questions/assign-bank - Assign question bank to exam (any teacher)
+// POST /api/questions/assign-bank - Assign question bank to exam (subject-based access)
 const assignQuestionBankToExam = asyncHandler(async (req, res) => {
   const teacher = req.teacher;
   const { exam_id, question_bank_id } = req.body;
@@ -539,7 +576,28 @@ const assignQuestionBankToExam = asyncHandler(async (req, res) => {
   });
   if (!exam) throw new AppError('Ujian tidak ditemukan', 404);
 
+  // Validate subject access to the exam
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
+
   guardExamStatus(exam);
+
+  const bank = await prisma.questionBank.findUnique({
+    where: { question_bank_id: parseInt(question_bank_id) },
+  });
+  if (!bank) throw new AppError('Bank soal tidak ditemukan', 404);
+
+  // Validate subject access to the question bank
+  validateSubjectAccess(teacher, bank.subject, 'bank soal');
+
+  if (bank.subject !== exam.subject) {
+    throw new AppError('Bank soal harus memiliki mata pelajaran yang sama dengan ujian', 400);
+  }
+  if (bank.grade_level !== exam.grade_level) {
+    throw new AppError('Bank soal harus memiliki tingkat yang sama dengan ujian', 400);
+  }
+  if (exam.major && bank.major !== exam.major) {
+    throw new AppError('Bank soal harus memiliki jurusan yang sama dengan ujian', 400);
+  }
 
   const questions = await prisma.question.findMany({
     where: { question_bank_id: parseInt(question_bank_id) },

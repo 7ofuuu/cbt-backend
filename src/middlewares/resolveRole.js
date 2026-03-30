@@ -32,7 +32,7 @@ const resolveTeacher = async (req, _res, next) => {
     });
 
     if (!teacher) {
-      throw new AppError('Guru tidak ditemukan', 404);
+      throw new AppError('Sesi guru tidak valid, silakan login ulang', 401);
     }
 
     req.teacher = teacher;
@@ -53,7 +53,7 @@ const resolveStudent = async (req, _res, next) => {
     });
 
     if (!student) {
-      throw new AppError('Siswa tidak ditemukan', 404);
+      throw new AppError('Sesi siswa tidak valid, silakan login ulang', 401);
     }
 
     req.student = student;

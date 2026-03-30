@@ -1,12 +1,13 @@
 const Joi = require('joi');
 const jwt = require('jsonwebtoken');
+const prisma = require('../config/db');
 
 // ============================================
 // AUTHENTICATION & AUTHORIZATION MIDDLEWARE
 // ============================================
 
 // Middleware untuk verify JWT token
-const verifyToken = (req, res, next) => {
+const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -19,9 +20,34 @@ const verifyToken = (req, res, next) => {
     if (!process.env.JWT_SECRET) {
       throw new Error('JWT_SECRET environment variable is not set');
     }
+
     // Explicitly specify algorithm to prevent algorithm confusion attacks
     const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
-    req.user = decoded; // { id: userId, role: 'admin'|'teacher'|'student' }
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+      select: {
+        id: true,
+        role: true,
+        is_active: true,
+        is_super_admin: true,
+      },
+    });
+
+    if (!user || !user.is_active) {
+      return res.status(401).json({ error: 'Sesi tidak valid, silakan login ulang' });
+    }
+
+    if (user.role !== decoded.role) {
+      return res.status(401).json({ error: 'Role akun berubah, silakan login ulang' });
+    }
+
+    req.user = {
+      id: user.id,
+      role: user.role,
+      is_super_admin: user.is_super_admin || false,
+    };
+
     next();
   } catch (error) {
     return res.status(401).json({ error: 'Token tidak valid atau sudah kadaluarsa' });
