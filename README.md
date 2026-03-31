@@ -19,6 +19,8 @@ Backend server for the Computer-Based Test (CBT) application built with Node.js,
 - **Activity Logging** — Logs LOGIN, START_UJIAN, FINISH_UJIAN, AUTO_FINISH, etc.
 - **Activity Monitoring** — Admin real-time exam monitoring, block/unblock participants
 - **Active Users Tracking** — View users who logged in within N hours
+- **School Profile** — Public read endpoint and admin update endpoint for school identity
+- **Analytics for Teacher/Coordinator** — Dashboard summary, question stats, teacher performance, coordinator audit
 
 ## Tech Stack
 
@@ -145,7 +147,7 @@ After `db push --force-reset`, run seed and login again in dashboard because old
 cbt-backend/
 ├── index.js                    # Entry point, route mounting, scheduler start
 ├── package.json
-├── API_DOCUMENTATION.md        # Full API reference (70 endpoints)
+├── API_DOCUMENTATION.md        # Full API reference (77 endpoints)
 ├── prisma/
 │   ├── schema.prisma           # Database schema (14 models, 4 enums, all English)
 │   ├── seed.js                 # Sample data seeder
@@ -161,7 +163,9 @@ cbt-backend/
 │   │   ├── userController.js         # Admin user management + teacher grading
 │   │   ├── activityController.js     # Admin exam monitoring
 │   │   ├── activityLogController.js  # Activity log queries
-│   │   └── examResultController.js   # Exam results
+│   │   ├── examResultController.js   # Exam results
+│   │   ├── schoolProfileController.js # School profile (public/admin)
+│   │   └── analyticsController.js    # Teacher/coordinator analytics endpoints
 │   ├── middlewares/
 │   │   ├── validationMiddleware.js   # JWT verify, role check, input validation
 │   │   └── resolveRole.js           # Resolve teacher/student from JWT user
@@ -173,14 +177,17 @@ cbt-backend/
 │   │   ├── userRoutes.js
 │   │   ├── activityRoutes.js
 │   │   ├── examResultRoutes.js
-│   │   └── activityLogRoutes.js
+│   │   ├── activityLogRoutes.js
+│   │   ├── schoolProfileRoutes.js
+│   │   └── analyticsRoutes.js
 │   └── services/
 │       ├── activityLogService.js     # Activity log CRUD
 │       ├── autoFinishService.js      # Auto-finish expired sessions
 │       ├── autoExpireExamService.js  # Auto-expire exam status
 │       ├── examService.js           # Exam business logic (guard, weights)
 │       ├── scoreService.js          # Score calculation & grading
-│       └── userService.js           # User CRUD & profile management
+│       ├── userService.js           # User CRUD & profile management
+│       └── analyticsService.js      # Analytics aggregations for dashboard/audit
 └── tests/
     └── integration/
 ```
@@ -254,7 +261,7 @@ When a teacher creates an exam, they set `start_date` (when students can begin) 
 
 ## API Documentation
 
-See [API_DOCUMENTATION.md](API_DOCUMENTATION.md) for the complete reference of all 70 endpoints with request/response examples.
+See [API_DOCUMENTATION.md](API_DOCUMENTATION.md) for the complete reference of all 77 endpoints with request/response examples.
 
 ## Super Admin
 
