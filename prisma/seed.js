@@ -98,14 +98,14 @@ async function main() {
   // ==================== CREATE TEACHERS ====================
   console.log('👨‍🏫 Creating teachers...');
   const teacherData = [
-    { username: 'guru_mtk', nama: 'Budi Santoso, S.Pd', active: true, nip: '198501012010011001' },
-    { username: 'guru_fisika', nama: 'Ani Wijaya, M.Pd', active: true, nip: '198602022011012002' },
-    { username: 'guru_kimia', nama: 'Dedi Suryanto, S.Si', active: true, nip: '198703032012011003' },
-    { username: 'guru_biologi', nama: 'Rina Kusuma, S.Pd', active: true, nip: '198804042013012004' },
-    { username: 'guru_bahasa', nama: 'Siti Nurhaliza, M.Pd', active: true, nip: '198905052014012005' },
-    { username: 'guru_sejarah', nama: 'Ahmad Fauzi, S.Pd', active: true, nip: '199006062015011006' },
-    { username: 'guru_ekonomi', nama: 'Dewi Lestari, M.Pd', active: true, nip: '199107072016012007' },
-    { username: 'guru_nonaktif', nama: 'Guru Nonaktif, S.Pd', active: false, nip: '199208082017011008' },
+    { username: 'guru_mtk', nama: 'Budi Santoso, S.Pd', active: true, nip: '198501012010011001', subject: 'Matematika', is_coordinator: true },
+    { username: 'guru_fisika', nama: 'Ani Wijaya, M.Pd', active: true, nip: '198602022011012002', subject: 'Fisika', is_coordinator: false },
+    { username: 'guru_kimia', nama: 'Dedi Suryanto, S.Si', active: true, nip: '198703032012011003', subject: 'Kimia', is_coordinator: false },
+    { username: 'guru_biologi', nama: 'Rina Kusuma, S.Pd', active: true, nip: '198804042013012004', subject: 'Biologi', is_coordinator: false },
+    { username: 'guru_bahasa', nama: 'Siti Nurhaliza, M.Pd', active: true, nip: '198905052014012005', subject: 'Bahasa Indonesia', is_coordinator: false },
+    { username: 'guru_sejarah', nama: 'Ahmad Fauzi, S.Pd', active: true, nip: '199006062015011006', subject: 'Sejarah', is_coordinator: false },
+    { username: 'guru_ekonomi', nama: 'Dewi Lestari, M.Pd', active: true, nip: '199107072016012007', subject: 'Ekonomi', is_coordinator: false },
+    { username: 'guru_nonaktif', nama: 'Guru Nonaktif, S.Pd', active: false, nip: '199208082017011008', subject: 'Geografi', is_coordinator: false },
   ];
 
   const teachers = [];
@@ -116,13 +116,20 @@ async function main() {
         password: hashedPassword,
         role: 'teacher',
         is_active: teacherItem.active,
-        teacher: { create: { full_name: teacherItem.nama, nip: teacherItem.nip } },
+        teacher: { 
+          create: { 
+            full_name: teacherItem.nama, 
+            nip: teacherItem.nip,
+            subject: teacherItem.subject,
+            is_coordinator: teacherItem.is_coordinator,
+          } 
+        },
       },
       include: { teacher: true },
     });
     teachers.push(user);
   }
-  console.log(`✅ Created ${teachers.length} teachers (7 active, 1 inactive)\n`);
+  console.log(`✅ Created ${teachers.length} teachers (7 active, 1 inactive, 1 coordinator)\n`);
 
   // ==================== CREATE STUDENTS ====================
   console.log('👨‍🎓 Creating students...');
@@ -273,7 +280,7 @@ async function main() {
           const question = await prisma.question.create({
             data: {
               question_type: 'SINGLE_CHOICE',
-              question_text: `[${gradeLevel}-${majorItem}] ${template.text}`,
+              question_text: template.text,
               subject: subjectName,
               grade_level: gradeLevel,
               major: majorItem,
@@ -301,7 +308,7 @@ async function main() {
           const question = await prisma.question.create({
             data: {
               question_type: 'MULTIPLE_CHOICE',
-              question_text: `[${gradeLevel}-${majorItem}] [MULTIPLE] ${template.text} (Pilih semua yang benar)`,
+              question_text: `${template.text} (Pilih semua yang benar)`,
               subject: subjectName,
               grade_level: gradeLevel,
               major: majorItem,
@@ -326,7 +333,7 @@ async function main() {
           const question = await prisma.question.create({
             data: {
               question_type: 'ESSAY',
-              question_text: `[${gradeLevel}-${majorItem}] Jelaskan secara detail tentang konsep ${subjectName} terkait topik ${i + 1}. Berikan contoh dan analisis yang mendalam.`,
+              question_text: `Jelaskan secara detail tentang konsep ${subjectName} terkait topik ${i + 1}. Berikan contoh dan analisis yang mendalam.`,
               subject: subjectName,
               grade_level: gradeLevel,
               major: majorItem,

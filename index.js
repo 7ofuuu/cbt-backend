@@ -14,6 +14,7 @@ const activityRoutes = require('./src/routes/activityRoutes');
 const examResultRoutes = require('./src/routes/examResultRoutes');
 const activityLogRoutes = require('./src/routes/activityLogRoutes');
 const schoolProfileRoutes = require('./src/routes/schoolProfileRoutes');
+const analyticsRoutes = require('./src/routes/analyticsRoutes');
 const autoFinishService = require('./src/services/autoFinishService');
 const autoExpireExamService = require('./src/services/autoExpireExamService');
 const { errorHandler } = require('./src/utils/asyncHandler');
@@ -91,6 +92,7 @@ app.use('/api/admin/activities', activityRoutes); // Activity Management (Admin)
 app.use('/api/exam-results', examResultRoutes); // Exam Results (Teacher & Student)
 app.use('/api/activity-logs', activityLogRoutes); // Activity Logs (Admin & Teacher)
 app.use('/api/school-profile', schoolProfileRoutes); // School Profile (Public GET, Admin PUT)
+app.use('/api/analytics', analyticsRoutes); // Analytics: Question Stats (Teacher)
 
 // Test Route
 app.get('/', (req, res) => {

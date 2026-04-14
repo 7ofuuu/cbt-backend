@@ -45,12 +45,15 @@ model Teacher {
   teacher_id     Int             @id @default(autoincrement())
   full_name      String
   nip            String?         @unique
+  subject        String          @db.VarChar(100)
+  is_coordinator Boolean         @default(false)
   user_id        Int             @unique
   user           User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
   questions      Question[]
   exams          Exam[]
   question_banks QuestionBank[]
 
+  @@index([subject])
   @@map("teachers")
 }
 

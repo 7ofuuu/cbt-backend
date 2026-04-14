@@ -1,6 +1,6 @@
 # CBT Backend — API Documentation
 
-Complete API reference for the Computer-Based Test backend. **70 endpoints** across 8 route groups.
+Complete API reference for the Computer-Based Test backend. **77 endpoints** across 10 route groups.
 
 ## Base URL
 
@@ -128,6 +128,7 @@ Update the authenticated user's profile.
 
 **Request Body (role-dependent, all fields optional):**
 
+- **Shared (all roles):** `username`
 - **Student:** `full_name`, `nisn`
 - **Teacher:** `full_name`, `nip`
 - **Admin:** `full_name`
@@ -148,6 +149,39 @@ Update the authenticated user's profile.
   "message": "Profile updated",
   "user": { "id": 1, "role": "student", "profile": { "..." } }
 }
+```
+
+**Error Responses:** `409` Username already exists
+
+---
+
+### PATCH `/api/auth/change-password`
+
+Change password for the authenticated user.
+
+**Middleware:** `verifyToken`
+
+**Request Body:**
+
+```json
+{
+  "current_password": "passwordlama123",
+  "new_password": "PasswordBaru123"
+}
+```
+
+**Password Policy:**
+
+- Minimum 8 characters
+- Must contain uppercase letter
+- Must contain lowercase letter
+- Must contain digit
+- Must be different from current password
+
+**Response (200):**
+
+```json
+{ "message": "Password berhasil diubah" }
 ```
 
 ---
@@ -1292,6 +1326,140 @@ Get logs by activity type. Query: `limit` (default: 100).
 
 ---
 
+## 9. School Profile (`/api/school-profile`)
+
+### GET `/api/school-profile/`
+
+Get school profile used by login page, dashboard header, and Flutter app. Public endpoint.
+
+**Auth:** Not required
+
+**Response (200):**
+
+```json
+{
+  "school_name": "SMA CBT Nusantara",
+  "school_address": "Jl. Pendidikan No. 1",
+  "school_phone": "021-1234567",
+  "school_email": "info@smacbt.sch.id",
+  "school_logo": null
+}
+```
+
+---
+
+### PUT `/api/school-profile/`
+
+Update school profile. Admin only.
+
+**Middleware:** `verifyToken`, `checkRole('admin')`
+
+**Request Body (all fields optional):**
+
+```json
+{
+  "school_name": "SMA CBT Nusantara",
+  "school_address": "Jl. Pendidikan No. 1",
+  "school_phone": "021-1234567",
+  "school_email": "info@smacbt.sch.id",
+  "school_logo": "https://.../logo.png"
+}
+```
+
+**Response (200):**
+
+```json
+{
+  "message": "Profil sekolah berhasil diperbarui",
+  "data": { "school_name": "SMA CBT Nusantara", "...": "..." }
+}
+```
+
+---
+
+## 10. Analytics (`/api/analytics`) — Teacher Only
+
+All routes require `verifyToken` + `checkRole('teacher')` + `resolveTeacher`.
+
+### GET `/api/analytics/question-stats`
+
+Get question-level statistics with filters and pagination.
+
+**Query Parameters:**
+
+- `exam_id` (optional)
+- `question_bank_id` (optional)
+- `subject` (optional, cross-subject only for coordinator)
+- `question_type` (optional): `SINGLE_CHOICE`, `MULTIPLE_CHOICE`, `ESSAY`
+- `sort_by` (optional): `correct_rate`, `incorrect_rate`, `total_attempts`, `avg_manual_score`
+- `order` (optional): `asc`, `desc`
+- `page`, `limit` (optional)
+
+---
+
+### GET `/api/analytics/dashboard-summary`
+
+Get teacher dashboard summary cards (exam count, question bank count, question type distribution).
+
+---
+
+### GET `/api/analytics/teacher-performance`
+
+Get interactive teacher performance insight for selected range/exam.
+
+**Query Parameters:**
+
+- `days` (optional, default 30, max 365)
+- `exam_id` (optional)
+- `subject` (optional; blocked for non-coordinator if not own subject)
+
+**Response (200):**
+
+```json
+{
+  "meta": {
+    "days": 30,
+    "from_date": "2026-03-01",
+    "to_date": "2026-03-31",
+    "subject": "Matematika",
+    "selected_exam": { "exam_id": 10, "exam_name": "UTS Matematika" }
+  },
+  "summary": {
+    "average_score": 82.5,
+    "pass_rate": 78.2,
+    "completion_rate": 91.3,
+    "graded_rate": 85.4,
+    "grading_backlog": 12
+  },
+  "recent_exams": [],
+  "question_alerts": [
+    {
+      "question_id": 120,
+      "question_bank_id": 9,
+      "question_type": "SINGLE_CHOICE",
+      "incorrect_rate": 100
+    }
+  ]
+}
+```
+
+---
+
+### GET `/api/analytics/coordinator-audit`
+
+Get cross-subject audit overview for coordinator only.
+
+**Access Rule:** teacher with `is_coordinator = true` only.
+
+**Query Parameters:**
+
+- `days` (optional, default 30, max 365)
+- `limit` (optional, default 8, max 50)
+
+**Error Response:** `403` when requester is not coordinator.
+
+---
+
 ## Global Deadline System
 
 Exam timing uses a **dual timer system**:
@@ -1338,7 +1506,7 @@ All errors follow:
 
 ---
 
-## Endpoint Summary (70 total)
+## Endpoint Summary (77 total)
 
 | # | Method | Route | Auth |
 |---|--------|-------|------|
@@ -1412,3 +1580,10 @@ All errors follow:
 | 68 | GET | `/api/activity-logs/user/:userId` | admin/teacher |
 | 69 | GET | `/api/activity-logs/exam-participant/:examParticipantId` | admin/teacher |
 | 70 | GET | `/api/activity-logs/type/:activityType` | admin/teacher |
+| 71 | PATCH | `/api/auth/change-password` | token |
+| 72 | GET | `/api/school-profile/` | — |
+| 73 | PUT | `/api/school-profile/` | admin |
+| 74 | GET | `/api/analytics/question-stats` | teacher |
+| 75 | GET | `/api/analytics/dashboard-summary` | teacher |
+| 76 | GET | `/api/analytics/teacher-performance` | teacher |
+| 77 | GET | `/api/analytics/coordinator-audit` | teacher (coordinator) |
