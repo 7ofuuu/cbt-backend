@@ -19,6 +19,8 @@ Backend server for the Computer-Based Test (CBT) application built with Node.js,
 - **Activity Logging** — Logs LOGIN, START_UJIAN, FINISH_UJIAN, AUTO_FINISH, etc.
 - **Activity Monitoring** — Admin real-time exam monitoring, block/unblock participants
 - **Active Users Tracking** — View users who logged in within N hours
+- **School Profile** — Public read endpoint and admin update endpoint for school identity
+- **Analytics for Teacher/Coordinator** — Dashboard summary, question stats, teacher performance, coordinator audit
 
 ## Tech Stack
 
@@ -49,12 +51,20 @@ npm install
 
 ### Environment Variables
 
-Create a `.env` file in the project root:
+Copy `.env.example` to `.env`:
+
+```bash
+# PowerShell
+Copy-Item .env.example .env
+```
+
+or create `.env` manually:
 
 ```env
 DATABASE_URL="mysql://username:password@localhost:3306/cbt_database"
 PORT=3000
 JWT_SECRET=your_secret_key_here
+CORS_ORIGINS="http://localhost:3001,http://localhost:3000"
 ```
 
 ### Database Setup
@@ -69,6 +79,8 @@ npx prisma db push
 # Seed sample data (optional)
 npx prisma db seed
 ```
+
+If `prisma migrate dev` reports migration drift in local development, use `prisma db push` for schema sync, then run seed again.
 
 **Seed data creates:** 3 Admins (1 Super Admin), 8 Teachers, 108 Students, 36 Question Banks, 720 Questions, 13 Exams, ~156 Exam Participants, ~510 Answers, 25 Exam Results, ~142 Activity Logs.
 
@@ -90,11 +102,16 @@ Server runs at `http://localhost:3000`. On startup, two schedulers automatically
 ### Useful Commands
 
 ```bash
+npm run lint              # Syntax check all backend JavaScript files
+npm run check             # Alias for lint (quick local health check)
+npm run cleanup:question-text-tags # Remove legacy [XII-IPS]/[MULTIPLE] prefixes from question_text
 npx prisma studio          # GUI database browser
 npx prisma db push --force-reset  # Reset database (delete all data + recreate)
 npx prisma db seed          # Re-seed sample data
 npx prisma generate         # Regenerate client after schema changes
 ```
+
+After `db push --force-reset`, run seed and login again in dashboard because old JWT sessions become invalid.
 
 ## Coding Standards
 
@@ -130,7 +147,7 @@ npx prisma generate         # Regenerate client after schema changes
 cbt-backend/
 ├── index.js                    # Entry point, route mounting, scheduler start
 ├── package.json
-├── API_DOCUMENTATION.md        # Full API reference (70 endpoints)
+├── API_DOCUMENTATION.md        # Full API reference (77 endpoints)
 ├── prisma/
 │   ├── schema.prisma           # Database schema (14 models, 4 enums, all English)
 │   ├── seed.js                 # Sample data seeder
@@ -146,7 +163,9 @@ cbt-backend/
 │   │   ├── userController.js         # Admin user management + teacher grading
 │   │   ├── activityController.js     # Admin exam monitoring
 │   │   ├── activityLogController.js  # Activity log queries
-│   │   └── examResultController.js   # Exam results
+│   │   ├── examResultController.js   # Exam results
+│   │   ├── schoolProfileController.js # School profile (public/admin)
+│   │   └── analyticsController.js    # Teacher/coordinator analytics endpoints
 │   ├── middlewares/
 │   │   ├── validationMiddleware.js   # JWT verify, role check, input validation
 │   │   └── resolveRole.js           # Resolve teacher/student from JWT user
@@ -158,14 +177,17 @@ cbt-backend/
 │   │   ├── userRoutes.js
 │   │   ├── activityRoutes.js
 │   │   ├── examResultRoutes.js
-│   │   └── activityLogRoutes.js
+│   │   ├── activityLogRoutes.js
+│   │   ├── schoolProfileRoutes.js
+│   │   └── analyticsRoutes.js
 │   └── services/
 │       ├── activityLogService.js     # Activity log CRUD
 │       ├── autoFinishService.js      # Auto-finish expired sessions
 │       ├── autoExpireExamService.js  # Auto-expire exam status
 │       ├── examService.js           # Exam business logic (guard, weights)
 │       ├── scoreService.js          # Score calculation & grading
-│       └── userService.js           # User CRUD & profile management
+│       ├── userService.js           # User CRUD & profile management
+│       └── analyticsService.js      # Analytics aggregations for dashboard/audit
 └── tests/
     └── integration/
 ```
@@ -239,7 +261,7 @@ When a teacher creates an exam, they set `start_date` (when students can begin) 
 
 ## API Documentation
 
-See [API_DOCUMENTATION.md](API_DOCUMENTATION.md) for the complete reference of all 70 endpoints with request/response examples.
+See [API_DOCUMENTATION.md](API_DOCUMENTATION.md) for the complete reference of all 77 endpoints with request/response examples.
 
 ## Super Admin
 

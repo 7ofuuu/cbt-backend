@@ -8,9 +8,11 @@ const { asyncHandler, AppError } = require('../utils/asyncHandler');
 const { calculateAndSaveResult } = require('../services/scoreService');
 const { buildPagination, paginatedResponse } = require('../services/userService');
 const activityLogService = require('../services/activityLogService');
+const { validateSubjectAccess, buildSubjectFilter } = require('../services/subjectAccessService');
 
 // GET /api/exam-results/participant/:exam_participant_id (all teachers can view)
 const getResultByParticipant = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
   const { exam_participant_id } = req.params;
 
   const result = await prisma.examResult.findUnique({
@@ -36,17 +38,22 @@ const getResultByParticipant = asyncHandler(async (req, res) => {
 
   if (!result) throw new AppError('Hasil ujian tidak ditemukan', 404);
 
+  validateSubjectAccess(teacher, result.exam_participant?.exam?.subject, 'hasil ujian');
+
   res.json({ result });
 });
 
 // GET /api/exam-results/exam/:exam_id - With pagination (all teachers can view)
 const getResultByExam = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
   const { exam_id } = req.params;
   const { skip, take, page, limit } = buildPagination(req.query, 20);
 
   // Verify exam exists
   const exam = await prisma.exam.findUnique({ where: { exam_id: parseInt(exam_id) } });
   if (!exam) throw new AppError('Ujian tidak ditemukan', 404);
+
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
 
   const where = {
     exam_participant: { exam_id: parseInt(exam_id) },
@@ -184,9 +191,11 @@ const calculateAndSaveResultHandler = asyncHandler(async (req, res) => {
   // Verify participant exists
   const participant = await prisma.examParticipant.findUnique({
     where: { exam_participant_id: parseInt(exam_participant_id) },
-    include: { exam: { select: { exam_id: true, exam_name: true } } },
+    include: { exam: { select: { exam_id: true, exam_name: true, subject: true } } },
   });
   if (!participant) throw new AppError('Peserta ujian tidak ditemukan', 404);
+
+  validateSubjectAccess(teacher, participant.exam.subject, 'ujian');
 
   const result = await calculateAndSaveResult(parseInt(exam_participant_id));
 
@@ -230,12 +239,14 @@ const updateManualScore = asyncHandler(async (req, res) => {
     where: { answer_id: parseInt(answer_id) },
     include: {
       exam_participant: {
-        include: { exam: { select: { exam_id: true, exam_name: true } } },
+        include: { exam: { select: { exam_id: true, exam_name: true, subject: true } } },
       },
     },
   });
 
   if (!answer) throw new AppError('Jawaban tidak ditemukan', 404);
+
+  validateSubjectAccess(teacher, answer.exam_participant?.exam?.subject, 'ujian');
 
   const updated = await prisma.answer.update({
     where: { answer_id: parseInt(answer_id) },
@@ -272,6 +283,7 @@ const updateManualScore = asyncHandler(async (req, res) => {
 
 // GET /api/exam-results/detail/:exam_participant_id (all teachers can view)
 const getDetailedResult = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
   const { exam_participant_id } = req.params;
   const participantId = parseInt(exam_participant_id);
 
@@ -328,6 +340,8 @@ const getDetailedResult = asyncHandler(async (req, res) => {
 
     if (!participant) throw new AppError('Peserta ujian tidak ditemukan', 404);
 
+    validateSubjectAccess(teacher, participant.exam?.subject, 'ujian');
+
     // Build review from participant data (no result yet)
     const detailedReview = participant.exam.exam_questions.map(eq => {
       const answer = participant.answers.find(a => a.question_id === eq.question_id);
@@ -353,6 +367,8 @@ const getDetailedResult = asyncHandler(async (req, res) => {
       review: detailedReview,
     });
   }
+
+  validateSubjectAccess(teacher, result.exam_participant?.exam?.subject, 'ujian');
 
   // Map answers to exam questions for review, using same scoring logic as scoreService
   const detailedReview = result.exam_participant.exam.exam_questions.map(eq => {
@@ -414,9 +430,12 @@ const getDetailedResult = asyncHandler(async (req, res) => {
 
 // GET /api/exam-results/completed-exams - All completed exams with stats (paginated, all teachers can view)
 const getCompletedExams = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
   const { skip, take, page, limit } = buildPagination(req.query, 10);
+  const subjectFilter = buildSubjectFilter(teacher);
 
   const where = {
+    ...subjectFilter,
     exam_status: 'ENDED',
   };
 

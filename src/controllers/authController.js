@@ -20,6 +20,38 @@ const register = asyncHandler(async (req, res) => {
   res.status(201).json({ message: 'User berhasil didaftarkan', userId: user.id });
 });
 
+/**
+ * Format teacher profile data for response.
+ * Only includes is_coordinator if true.
+ * @param {object} teacher - Teacher record
+ * @returns {object}
+ */
+const formatTeacherProfile = (teacher) => {
+  if (!teacher) return null;
+  const profile = {
+    teacher_id: teacher.teacher_id,
+    full_name: teacher.full_name,
+    nip: teacher.nip,
+    subject: teacher.subject,
+  };
+  if (teacher.is_coordinator) {
+    profile.is_coordinator = true;
+  }
+  return profile;
+};
+
+/**
+ * Get profile data based on user role.
+ * @param {object} user - User with included profiles
+ * @returns {object|null}
+ */
+const getProfileData = (user) => {
+  if (user.role === 'student') return user.student;
+  if (user.role === 'teacher') return formatTeacherProfile(user.teacher);
+  if (user.role === 'admin') return user.admin;
+  return null;
+};
+
 // POST /api/auth/login
 const login = asyncHandler(async (req, res) => {
   const { username, password } = req.body;
@@ -40,15 +72,12 @@ const login = asyncHandler(async (req, res) => {
 
   if (!user.is_active) throw new AppError('Akun dinonaktifkan', 403);
 
-  let profileData = null;
-  if (user.role === 'student') profileData = user.student;
-  else if (user.role === 'teacher') profileData = user.teacher;
-  else if (user.role === 'admin') profileData = user.admin;
+  const profileData = getProfileData(user);
 
   const token = jwt.sign(
     { id: user.id, role: user.role, is_super_admin: user.is_super_admin || false },
     process.env.JWT_SECRET,
-    { expiresIn: '1d' }
+    { expiresIn: '1d', algorithm: 'HS256' }
   );
 
   await activityLogService.createLog({
@@ -82,10 +111,7 @@ const me = asyncHandler(async (req, res) => {
 
   if (!user) throw new AppError('User tidak ditemukan', 404);
 
-  let profileData = null;
-  if (user.role === 'student') profileData = user.student;
-  else if (user.role === 'teacher') profileData = user.teacher;
-  else if (user.role === 'admin') profileData = user.admin;
+  const profileData = getProfileData(user);
 
   res.json({
     message: 'Profile fetched',
@@ -102,10 +128,21 @@ const me = asyncHandler(async (req, res) => {
 // PATCH /api/auth/profile
 const updateProfile = asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  const { full_name, classroom, grade_level, major, nisn, nip } = req.body;
+  const { username, full_name, classroom, grade_level, major, nisn, nip } = req.body;
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new AppError('User tidak ditemukan', 404);
+
+  if (username && username !== user.username) {
+    const existingUsername = await prisma.user.findUnique({ where: { username } });
+    if (existingUsername) {
+      throw new AppError('Username sudah digunakan', 409);
+    }
+    await prisma.user.update({
+      where: { id: userId },
+      data: { username },
+    });
+  }
 
   if (user.role === 'student') {
     const student = await prisma.student.findUnique({ where: { user_id: userId } });
@@ -147,15 +184,13 @@ const updateProfile = asyncHandler(async (req, res) => {
     include: { student: true, teacher: true, admin: true },
   });
 
-  let profileData = null;
-  if (freshUser.role === 'student') profileData = freshUser.student;
-  else if (freshUser.role === 'teacher') profileData = freshUser.teacher;
-  else if (freshUser.role === 'admin') profileData = freshUser.admin;
+  const profileData = getProfileData(freshUser);
 
   res.json({
     message: 'Profile updated',
     user: {
       id: freshUser.id,
+      username: freshUser.username,
       role: freshUser.role,
       is_super_admin: freshUser.is_super_admin || false,
       profile: profileData,
@@ -171,8 +206,13 @@ const changePassword = asyncHandler(async (req, res) => {
     throw new AppError('Password saat ini dan password baru wajib diisi', 400);
   }
 
-  if (new_password.length < 6) {
-    throw new AppError('Password baru minimal 6 karakter', 400);
+  // Match registration password policy: min 8 chars, uppercase, lowercase, digit
+  if (new_password.length < 8) {
+    throw new AppError('Password baru minimal 8 karakter', 400);
+  }
+
+  if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(new_password)) {
+    throw new AppError('Password baru harus mengandung huruf besar, huruf kecil, dan angka', 400);
   }
 
   if (current_password === new_password) {

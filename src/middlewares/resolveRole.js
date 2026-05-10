@@ -7,7 +7,7 @@
  *   router.get('/path', verifyToken, resolveStudent, handler);
  *
  * After middleware runs:
- *   req.teacher = { teacher_id, full_name, ... }
+ *   req.teacher = { teacher_id, full_name, subject, is_coordinator, ... }
  *   req.student = { student_id, full_name, ... }
  */
 const prisma = require('../config/db');
@@ -15,16 +15,24 @@ const { AppError } = require('../utils/asyncHandler');
 
 /**
  * Resolves teacher profile from req.user.id.
- * Sets req.teacher with teacher record.
+ * Sets req.teacher with teacher record including subject and is_coordinator.
  */
 const resolveTeacher = async (req, _res, next) => {
   try {
     const teacher = await prisma.teacher.findUnique({
       where: { user_id: req.user.id },
+      select: {
+        teacher_id: true,
+        full_name: true,
+        nip: true,
+        subject: true,
+        is_coordinator: true,
+        user_id: true,
+      },
     });
 
     if (!teacher) {
-      throw new AppError('Guru tidak ditemukan', 404);
+      throw new AppError('Sesi guru tidak valid, silakan login ulang', 401);
     }
 
     req.teacher = teacher;
@@ -45,7 +53,7 @@ const resolveStudent = async (req, _res, next) => {
     });
 
     if (!student) {
-      throw new AppError('Siswa tidak ditemukan', 404);
+      throw new AppError('Sesi siswa tidak valid, silakan login ulang', 401);
     }
 
     req.student = student;

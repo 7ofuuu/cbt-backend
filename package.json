@@ -3,10 +3,17 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest --forceExit",
+    "test:unit": "jest tests/unit --forceExit",
+    "test:bb": "jest tests/blackbox --runInBand --forceExit",
+    "test:coverage": "jest --coverage --forceExit",
     "dev": "nodemon index.js",
+    "start": "node index.js",
+    "lint": "node scripts/lintSyntax.js",
+    "check": "npm run lint",
     "postinstall": "prisma generate",
-    "seed": "node prisma/seed.js"
+    "seed": "node prisma/seed.js",
+    "cleanup:question-text-tags": "node scripts/cleanupQuestionTextTags.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
@@ -27,7 +34,9 @@
     "jsonwebtoken": "^9.0.3"
   },
   "devDependencies": {
+    "jest": "^30.3.0",
     "nodemon": "^3.1.11",
-    "prisma": "^6.19.0"
+    "prisma": "^6.19.0",
+    "supertest": "^7.2.2"
   }
 }
