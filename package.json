@@ -11,7 +11,7 @@
     "start": "node index.js",
     "lint": "node scripts/lintSyntax.js",
     "check": "npm run lint",
-    "postinstall": "prisma generate && prisma migrate deploy",
+    "postinstall": "prisma generate",
     "seed": "node prisma/seed.js",
     "cleanup:question-text-tags": "node scripts/cleanupQuestionTextTags.js"
   },
