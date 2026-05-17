@@ -9,6 +9,7 @@
     "test:coverage": "jest --coverage --forceExit",
     "dev": "nodemon index.js",
     "start": "node index.js",
+    "build": "npm install && npx prisma generate",
     "lint": "node scripts/lintSyntax.js",
     "check": "npm run lint",
     "postinstall": "prisma generate",
