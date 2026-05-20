@@ -222,8 +222,11 @@ const changePassword = asyncHandler(async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user.id } });
   if (!user) throw new AppError('User tidak ditemukan', 404);
 
+  // 400 (not 401): the session is valid, only the supplied current password is
+  // wrong. A 401 here would trip the dashboard's global "session expired" handler
+  // and log the user out instead of showing the error.
   const validPassword = await bcrypt.compare(current_password, user.password);
-  if (!validPassword) throw new AppError('Password saat ini salah', 401);
+  if (!validPassword) throw new AppError('Password saat ini salah', 400);
 
   const hashedPassword = await bcrypt.hash(new_password, SALT_ROUNDS);
   await prisma.user.update({
