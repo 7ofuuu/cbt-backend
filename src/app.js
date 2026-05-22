@@ -16,16 +16,34 @@ const { errorHandler } = require('./utils/asyncHandler');
 
 const app = express();
 
+// ngrok forwards requests through its edge, so client IPs arrive via
+// X-Forwarded-For. Trust one proxy hop so express-rate-limit keys correctly.
+app.set('trust proxy', 1);
+
 app.use(helmet());
 
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(s => s.trim())
   : ['http://localhost:3000', 'http://localhost:3001'];
 
+// Opt-in: allow any ngrok subdomain (dashboard gets a random URL on free tier).
+// Keep this OFF in production; enable only for the local + ngrok dev setup.
+const allowNgrokOrigins = process.env.ALLOW_NGROK_ORIGINS === 'true';
+const ngrokOriginRegex = /^https:\/\/[a-z0-9-]+\.ngrok(-free)?\.app$/i;
+
+// Opt-in: allow any *.vercel.app origin so the dashboard hosted on Vercel
+// (production + preview deploys get rotating subdomains) can call this API
+// through the ngrok backend URL. For production hardening, pin the exact
+// Vercel domain in CORS_ORIGINS instead and keep this OFF.
+const allowVercelOrigins = process.env.ALLOW_VERCEL_ORIGINS === 'true';
+const vercelOriginRegex = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i;
+
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (allowNgrokOrigins && ngrokOriginRegex.test(origin)) return callback(null, true);
+    if (allowVercelOrigins && vercelOriginRegex.test(origin)) return callback(null, true);
     return callback(new Error('Not allowed by CORS'), false);
   },
   credentials: true,

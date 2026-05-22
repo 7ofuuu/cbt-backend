@@ -116,6 +116,8 @@ CORS_ORIGINS="http://localhost:3001,http://localhost:3000"
 - `PORT` — Server port (default 3000)
 - `JWT_SECRET` — Secret key for JWT signing (use strong random string in production)
 - `CORS_ORIGINS` — Comma-separated allowed origins for CORS
+- `ALLOW_NGROK_ORIGINS` — Set `true` to permit any `*.ngrok-free.app` / `*.ngrok.app` origin (dev only — keep off in production). See [NGROK-FIREBASE-SETUP.md](../NGROK-FIREBASE-SETUP.md).
+- `ALLOW_VERCEL_ORIGINS` — Set `true` to permit any `*.vercel.app` origin so the Vercel-hosted dashboard can call this API (it reaches the backend via the ngrok URL). For production, pin the exact Vercel domain in `CORS_ORIGINS` and keep this off.
 
 ### 4. Setup Database
 
@@ -145,6 +147,61 @@ npx prisma db seed
 npx prisma db push --force-reset
 npx prisma db seed
 ```
+
+---
+
+## Model Hosting Tim
+
+Untuk demo / distribusi APK, **hanya satu orang (host) yang perlu menjalankan server**.
+Anggota tim lainnya tetap bisa mengembangkan dan push ke repo tanpa perlu menjalankan
+backend sendiri.
+
+| Peran | Yang dilakukan |
+|-------|----------------|
+| **Host** (yang punya ngrok + komputer server) | Jalankan `npm run dev` + `npm run ngrok`. Backend & dashboard bisa diakses oleh semua orang via URL ngrok. |
+| **Anggota tim lain** | Push kode ke repo seperti biasa. Kalau ingin test, hubungi host untuk minta URL ngrok dashboard atau gunakan APK yang sudah didistribusi. |
+| **Tester / stakeholder** | Install APK dari Firebase App Distribution, langsung bisa pakai tanpa setup. |
+
+> Host tidak perlu melakukan apapun khusus tiap ada update kode dari tim —
+> cukup `git pull` dan restart `npm run dev`. Semua orang otomatis dapat versi terbaru
+> karena mengakses server yang sama via ngrok.
+
+---
+
+## ngrok (Internet Access / Firebase App Distribution)
+
+Gunakan ngrok untuk mengekspos backend ke internet — dibutuhkan saat APK Flutter
+didistribusikan via Firebase App Distribution dan harus menjangkau server lokal.
+Server lokal tetap jalan normal; ngrok hanya membuka jalur tambahan dari internet.
+
+**Setup satu kali:**
+
+```powershell
+winget install ngrok.ngrok
+ngrok config add-authtoken <TOKEN>   # dari https://dashboard.ngrok.com
+```
+
+**Jalankan (setelah `npm run dev` sudah jalan):**
+
+```bash
+npm run ngrok
+```
+
+`ngrok.yml` di root repo ini berisi konfigurasi dua tunnel (backend:3000 + dashboard:3001).
+Ganti `domain:` di `ngrok.yml` dengan static domain Anda dari dashboard ngrok.
+
+**Env var terkait:**
+- `ALLOW_NGROK_ORIGINS=true` — izinkan CORS dari `*.ngrok-free.app` (dev only, sudah ada di `.env`)
+- `ALLOW_VERCEL_ORIGINS=true` — izinkan CORS dari `*.vercel.app` (dipakai saat dashboard di-host di Vercel)
+
+Panduan lengkap + Firebase App Distribution: lihat `NGROK-FIREBASE-SETUP.md` di root repo.
+
+### Dashboard di-host di Vercel
+
+Dashboard bisa di-deploy ke Vercel sementara backend tetap lokal + diekspos via ngrok.
+Frontend Vercel memanggil backend lewat URL ngrok static domain, jadi host wajib
+menjalankan `npm run dev` + `npm run ngrok`. Set `ALLOW_VERCEL_ORIGINS=true` di `.env`.
+Panduan langkah deploy ada di `cbt-dashboard/VERCEL-DEPLOY.md`.
 
 ---
 

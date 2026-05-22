@@ -1,0 +1,17 @@
+# ngrok agent config for the CBT project.
+#
+# Authtoken is NOT stored here. Set it once, globally:
+#   ngrok config add-authtoken <YOUR_TOKEN>
+# (writes to %LOCALAPPDATA%\ngrok\ngrok.yml). The npm run ngrok script
+# passes BOTH that global file (for the token) and this file (for tunnels).
+#
+# Free tier: 1 static domain -> dipakai untuk BACKEND (baked ke APK Flutter).
+# Dashboard tidak di-tunnel karena free tier tidak support 2 URL bersamaan.
+# Dashboard tetap bisa diakses lokal di http://localhost:3001.
+version: "2"
+
+tunnels:
+  backend:
+    proto: http
+    addr: 3000
+    domain: crouton-boxlike-dove.ngrok-free.dev
