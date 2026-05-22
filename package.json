@@ -8,6 +8,7 @@
     "test:bb": "jest tests/blackbox --runInBand --forceExit",
     "test:coverage": "jest --coverage --forceExit",
     "dev": "nodemon index.js",
+    "ngrok": "ngrok start --all --config \"%LOCALAPPDATA%\\ngrok\\ngrok.yml\" --config \"./ngrok.yml\"",
     "start": "node index.js",
     "build": "npm install && npx prisma generate",
     "lint": "node scripts/lintSyntax.js",

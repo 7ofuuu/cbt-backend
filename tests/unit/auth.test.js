@@ -235,11 +235,13 @@ describe('changePassword', () => {
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
   });
 
-  test('WB-15: wrong current password → AppError 401', async () => {
+  test('WB-15: wrong current password → AppError 400', async () => {
+    // 400, not 401: the session is valid, only the supplied password is wrong.
+    // A 401 would trip the dashboard global session-expired handler and log the user out.
     bcrypt.compare.mockResolvedValue(false);
     const { req, res, next } = makeReqRes({ current_password: 'WrongOld1', new_password: 'NewPass1' }, { id: 1, role: 'admin' });
     changePassword(req, res, next); await flush();
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
   });
 
   test('WB-16: valid change → 200 success message', async () => {

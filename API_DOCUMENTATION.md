@@ -1,6 +1,64 @@
-# CBT Backend — API Documentation
+# CBT Backend — Complete API Documentation
 
-Complete API reference for the Computer-Based Test backend. **77 endpoints** across 10 route groups.
+**77 endpoints** covering authentication, question management, exam administration, student exam operations, user management, activity monitoring, results grading, and analytics.
+
+- **Backend Repo:** [cbt-backend](../cbt-backend/)  
+- **Backend README:** [Backend Setup Guide](../cbt-backend/README.md)
+- **Dashboard Repo:** [cbt-dashboard](../cbt-dashboard/)  
+- **Mobile App Repo:** [cbt_app](../cbt_app/)
+
+---
+
+## Quick Start
+
+### Base URL
+
+```
+http://localhost:3000/api
+```
+
+### Authentication
+
+All endpoints (except `/auth/login`, `/auth/register`, and `/school-profile`) require JWT token:
+
+```
+Authorization: Bearer <token>
+```
+
+**JWT Payload:** `{ id, role, is_super_admin }`  
+**Expiry:** 24 hours
+
+### Response Format
+
+**Success (2xx):**
+```json
+{ "message": "...", "data": {...}, ...other fields }
+```
+
+**Error (4xx/5xx):**
+```json
+{ "error": "Error description" }
+```
+
+---
+
+## Endpoint Overview
+
+| Group | Endpoints | Auth Required | Primary Users |
+|-------|-----------|---------------|---------------|
+| Auth | 6 | No/Yes | All |
+| Questions | 11 | Yes | Teachers |
+| Exams | 13 | Yes | Teachers |
+| Student Exam | 5 | Yes (Student) | Students |
+| User Management | 15 | Yes (Admin/Teacher) | Admin/Teachers |
+| Activity Monitoring | 6 | Yes (Admin) | Admin |
+| Exam Results | 7 | Yes | Students/Teachers |
+| Activity Logs | 5 | Yes | Admin/Teachers |
+| School Profile | 2 | No/Yes (Admin) | All/Admin |
+| Analytics | 4 | Yes (Teacher) | Teachers |
+| **TOTAL** | **77** | — | — |
+
+---
 
 ## Base URL
 
@@ -1587,3 +1645,209 @@ All errors follow:
 | 75 | GET | `/api/analytics/dashboard-summary` | teacher |
 | 76 | GET | `/api/analytics/teacher-performance` | teacher |
 | 77 | GET | `/api/analytics/coordinator-audit` | teacher (coordinator) |
+
+---
+
+## Common Workflows
+
+### 1. Admin Setup Flow
+
+1. **Login** (POST `/api/auth/login`)
+2. **Create Teachers** (POST `/api/users/` or POST `/api/users/batch`)
+3. **Create Students** (POST `/api/users/` or POST `/api/users/batch`)
+4. **Monitor Activity** (GET `/api/admin/activities/`)
+5. **Block/Unblock** (POST `/api/admin/activities/{id}/block`, generate unlock code)
+
+### 2. Teacher Exam Creation Flow
+
+1. **Login** (POST `/api/auth/login` as teacher)
+2. **Create Question Bank** (POST `/api/questions/bank`)
+3. **Add Questions to Bank** (POST `/api/questions/` x N)
+4. **Create Exam** (POST `/api/exams/`)
+5. **Assign Questions** (POST `/api/exams/assign-bank` or POST `/api/exams/assign-question`)
+6. **Assign Students** (POST `/api/exams/assign-student` — auto-happens on creation)
+7. **Grade Essays** (POST `/api/users/score`)
+8. **Finalize Scores** (POST `/api/users/finalize`)
+
+### 3. Student Exam Taking Flow
+
+1. **Login** (POST `/api/auth/login` as student)
+2. **View Exams** (GET `/api/students/exams`)
+3. **Start Exam** (POST `/api/students/exams/start`)
+4. **Submit Answers** (POST `/api/students/exams/answer` x N)
+5. **Finish Exam** (POST `/api/students/exams/finish`)
+6. **View Results** (GET `/api/exam-results/my-results`)
+
+### 4. Teacher Results Review Flow
+
+1. **Login** (POST `/api/auth/login` as teacher)
+2. **View Completed Exams** (GET `/api/exam-results/completed-exams`)
+3. **View Participant Results** (GET `/api/exam-results/exam/:exam_id`)
+4. **Grade Essays** (POST `/api/users/score`)
+5. **Finalize Scores** (POST `/api/users/finalize`)
+6. **View Detailed Review** (GET `/api/exam-results/detail/:exam_participant_id`)
+
+---
+
+## Timing & Deadlines
+
+### Dual Timer System
+
+Each exam has **two time limits**:
+
+1. **Global Deadline** (`exam.end_date`)
+   - Hard cutoff for ALL participants
+   - No exceptions — all must finish by this time
+   - Server auto-finishes at deadline
+
+2. **Per-Student Duration** (`exam.duration_minutes`)
+   - Individual countdown starting when student begins
+   - Student effective deadline = `min(start_time + duration_minutes, end_date)`
+
+### Scheduler Behavior
+
+**Auto-Finish Scheduler** (runs every 60 seconds):
+- Checks all `IN_PROGRESS` participants
+- If `current_time > exam.end_date` → auto-finishes exam
+- Auto-grades MC questions using answer keys
+- Sets status to `COMPLETED` (has essay) or `GRADED` (all MC/graded)
+- Logs `AUTO_FINISH_UJIAN` activity
+
+**Auto-Expire Scheduler** (runs every 60 seconds):
+- Checks all exams with `SCHEDULED` or `ONGOING` status
+- If `current_time > exam.end_date` → changes status to `ENDED`
+- Logs `UJIAN_AUTO_EXPIRED` activity
+
+---
+
+## Troubleshooting
+
+### Common Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `401 Unauthorized` | Missing/invalid JWT token | Verify token in `Authorization` header, ensure not expired |
+| `403 Forbidden` | Wrong role or insufficient permissions | Check user role and endpoint access level |
+| `409 Conflict` | Duplicate username or question bank name | Ensure unique identifiers, check existing data |
+| `400 Bad Request` | Invalid/missing request body fields | Review endpoint documentation, validate payload |
+| `404 Not Found` | Resource doesn't exist | Verify ID exists and is correct |
+| `500 Internal Server Error` | Server crash or unexpected error | Check server logs, restart backend if needed |
+
+### Student Blocked / Anti-Cheat
+
+**Issue:** Student sees "Exam Blocked" page
+
+**Why:** App was backgrounded (not visible) for >10 seconds during exam
+
+**Solution:**
+1. Admin generates unlock code: POST `/api/admin/activities/{id}/generate-unlock`
+2. Student provides code: POST `/api/students/exams/start` with `unlock_code` parameter
+3. Exam resumes if code is valid
+
+### Exam Not Showing Up
+
+**Issue:** Student doesn't see exam in exam list
+
+**Possible causes:**
+- Exam status is not `SCHEDULED` or `ONGOING`
+- Student's `grade_level` + `major` don't match exam criteria
+- Student hasn't been assigned to exam
+
+**Solution:**
+1. Teacher: Verify exam status (POST `/api/exams/` creates as `SCHEDULED`)
+2. Teacher: Verify student was assigned (check GET `/api/exams/:id` participants list)
+3. Teacher: Manually assign if needed (POST `/api/exams/assign-student`)
+
+### Answers Not Saving
+
+**Issue:** Student submits answer but it doesn't persist
+
+**Possible causes:**
+- Network connection lost
+- Invalid `exam_participant_id`
+- Server timeout
+
+**Solution:**
+1. Check network connectivity
+2. Retry submission via frontend retry logic
+3. Verify participant ID is correct (from `/api/students/exams/start`)
+
+### Scores Not Calculating
+
+**Issue:** Results show 0 score or incorrect totals
+
+**Possible causes:**
+- Essays not graded yet (status is `COMPLETED`, not `GRADED`)
+- Manual scores not saved (POST `/api/users/score` not called)
+- Finalize not called (POST `/api/users/finalize` not called)
+
+**Solution:**
+1. Grade all essay answers (POST `/api/users/score`)
+2. Call finalize endpoint (POST `/api/users/finalize`)
+3. Verify in GET `/api/exam-results/detail/:exam_participant_id`
+
+---
+
+## Best Practices
+
+### For Clients (Dashboard/Mobile App)
+
+1. **Token Management**
+   - Store JWT securely (HTTP-only cookies for web, SharedPreferences for mobile)
+   - Auto-attach to all requests
+   - Handle 401 → redirect to login
+
+2. **Error Handling**
+   - Always check `error?.response?.data?.error` for backend message
+   - Show user-friendly error dialogs
+   - Log errors for debugging
+
+3. **Pagination**
+   - Use `page` and `limit` query params
+   - Cache results locally if possible
+   - Show loading indicator while fetching
+
+4. **Auto-Save (Mobile App)**
+   - Submit answer immediately on selection
+   - Handle network failures gracefully
+   - Queue offline answers if needed
+
+### For Developers
+
+1. **Testing Endpoints**
+   - Use Postman/Thunder Client with JWT tokens
+   - Test with multiple roles (admin, teacher, student)
+   - Verify ownership checks (e.g., teacher can't access other's questions)
+
+2. **Data Validation**
+   - Always validate required fields
+   - Check min/max lengths (e.g., password policy)
+   - Use consistent date formats (ISO 8601)
+
+3. **Performance**
+   - Use pagination to avoid huge responses
+   - Index frequently-queried fields (user_id, exam_id, etc.)
+   - Cache school profile and constants
+
+4. **Security**
+   - Never expose `is_correct` in answer options during exam
+   - Verify Super Admin protections (can't delete/downgrade)
+   - Use HTTPS in production
+   - Rotate JWT secrets periodically
+
+---
+
+## Support & Resources
+
+- **Backend Repository:** [cbt-backend/](../cbt-backend/)
+- **Backend README:** [Setup & Configuration](../cbt-backend/README.md)
+- **Dashboard Setup:** [cbt-dashboard/README.md](../cbt-dashboard/README.md)
+- **Mobile App Setup:** [cbt_app/README.md](../cbt_app/README.md)
+- **Database Schema:** [prisma/schema.prisma](../cbt-backend/prisma/schema.prisma)
+- **Seed Data:** [prisma/seed.js](../cbt-backend/prisma/seed.js)
+
+---
+
+**Last Updated:** May 2026  
+**API Version:** 1.0  
+**Total Endpoints:** 77
