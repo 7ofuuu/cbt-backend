@@ -42,7 +42,7 @@ const parseBooleanLike = (value, fieldName = 'boolean') => {
  */
 const listUsers = (roleFilter = null) =>
   asyncHandler(async (req, res) => {
-    const { search } = req.query;
+    const { search, status } = req.query;
     const { skip, take, page, limit } = buildPagination(req.query);
 
     const where = {};
@@ -55,6 +55,10 @@ const listUsers = (roleFilter = null) =>
         { student: { full_name: { contains: search } } },
       ];
     }
+    // status filter — used by the admin user-list pages to show only active
+    // or only inactive accounts (and to power the bulk-delete-inactive flow).
+    if (status === 'active') where.is_active = true;
+    else if (status === 'inactive') where.is_active = false;
 
     const [users, total] = await Promise.all([
       prisma.user.findMany({
