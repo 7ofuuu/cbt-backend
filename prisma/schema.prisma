@@ -265,6 +265,54 @@ enum QuestionType {
 }
 
 // ============================================
+// MASTER DATA / TAXONOMY
+// ----------------------------------------------
+// These tables drive admin-managed dropdowns and filters across the dashboard
+// (Subject, GradeLevel, Major). String columns on Exam/Question/Student etc.
+// stay as snapshots — they are not FK'd to these tables so renaming or
+// deactivating a taxonomy row does not corrupt historical data. Deletion is
+// soft via is_active so old exams keep their labels.
+// ============================================
+model Subject {
+  subject_id Int      @id @default(autoincrement())
+  name       String   @unique @db.VarChar(100)
+  color      String?  @db.VarChar(20)  // tailwind palette key (e.g. "blue", "emerald") for theming
+  sort_order Int      @default(0)
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([is_active, sort_order])
+  @@map("subjects")
+}
+
+model GradeLevel {
+  grade_level_id Int      @id @default(autoincrement())
+  value          String   @unique @db.VarChar(20)  // stored on Student/Exam (e.g. "X")
+  label          String   @db.VarChar(50)          // display name (e.g. "Kelas 10")
+  sort_order     Int      @default(0)
+  is_active      Boolean  @default(true)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  @@index([is_active, sort_order])
+  @@map("grade_levels")
+}
+
+model Major {
+  major_id   Int      @id @default(autoincrement())
+  value      String   @unique @db.VarChar(50)  // stored on Student/Exam (e.g. "IPA")
+  label      String   @db.VarChar(100)
+  sort_order Int      @default(0)
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([is_active, sort_order])
+  @@map("majors")
+}
+
+// ============================================
 // SCHOOL PROFILE (singleton – only 1 row)
 // ============================================
 model SchoolProfile {
