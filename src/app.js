@@ -12,6 +12,7 @@ const examResultRoutes = require('./routes/examResultRoutes');
 const activityLogRoutes = require('./routes/activityLogRoutes');
 const schoolProfileRoutes = require('./routes/schoolProfileRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
+const taxonomyRoutes = require('./routes/taxonomyRoutes');
 const { errorHandler } = require('./utils/asyncHandler');
 
 const app = express();
@@ -97,9 +98,16 @@ app.use('/api/exam-results', examResultRoutes);
 app.use('/api/activity-logs', activityLogRoutes);
 app.use('/api/school-profile', schoolProfileRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/taxonomy', taxonomyRoutes);
 
 app.get('/', (req, res) => {
   res.send('CBT Server Running');
+});
+
+// Trusted server time — clients use this to validate exam start/end windows
+// and to detect device clock tampering. Cheap, public, no auth required.
+app.get('/api/time', (req, res) => {
+  res.json({ now: new Date().toISOString() });
 });
 
 app.use(errorHandler);
