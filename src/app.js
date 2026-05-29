@@ -1,8 +1,11 @@
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const authRoutes = require('./routes/authRoutes');
+const uploadRoutes = require('./routes/uploadRoutes');
+const { UPLOADS_ROOT } = require('./middlewares/uploadMiddleware');
 const questionRoutes = require('./routes/questionRoutes');
 const examRoutes = require('./routes/examRoutes');
 const studentRoutes = require('./routes/studentRoutes');
@@ -21,7 +24,16 @@ const app = express();
 // X-Forwarded-For. Trust one proxy hop so express-rate-limit keys correctly.
 app.set('trust proxy', 1);
 
-app.use(helmet());
+// helmet defaults add a strict Content-Security-Policy and a same-origin
+// Cross-Origin-Resource-Policy. The first one blocks <img src="…/uploads/…">
+// loaded from the dashboard (different port), and the second one blocks the
+// image even when the page itself allows it. We don't render HTML here, so CSP
+// gives no value — disable it and relax CORP to cross-origin globally.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginEmbedderPolicy: false,
+}));
 
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(s => s.trim())
@@ -88,6 +100,18 @@ if (process.env.NODE_ENV !== 'test') {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Serve uploaded files (logos, question images). Cross-origin <img> needs CORP
+// relaxed since the dashboard runs on a different port than this API.
+app.use(
+  '/uploads',
+  (req, res, next) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    next();
+  },
+  express.static(UPLOADS_ROOT, { maxAge: '7d', fallthrough: false }),
+);
+
+app.use('/api/upload', uploadRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/exams', examRoutes);

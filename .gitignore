@@ -3,3 +3,7 @@ node_modules
 .env
 
 /generated/prisma
+
+# Uploaded user files (logos, question images) — local-only
+uploads/*
+!uploads/.gitkeep
