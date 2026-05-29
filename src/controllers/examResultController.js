@@ -9,6 +9,7 @@ const { calculateAndSaveResult } = require('../services/scoreService');
 const { buildPagination, paginatedResponse } = require('../services/userService');
 const activityLogService = require('../services/activityLogService');
 const { validateSubjectAccess, buildSubjectFilter } = require('../services/subjectAccessService');
+const { EXAM_LIST_INCLUDE, formatExamForList } = require('../services/examResultFormatter');
 
 // GET /api/exam-results/participant/:exam_participant_id (all teachers can view)
 const getResultByParticipant = asyncHandler(async (req, res) => {
@@ -200,17 +201,16 @@ const calculateAndSaveResultHandler = asyncHandler(async (req, res) => {
   const result = await calculateAndSaveResult(parseInt(exam_participant_id));
 
   // Activity log
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'CALCULATE_RESULT',
-    description: `${teacher.full_name} menghitung hasil ujian "${participant.exam.exam_name}" untuk peserta #${exam_participant_id}`,
-    metadata: {
-      exam_participant_id: parseInt(exam_participant_id),
-      exam_id: participant.exam.exam_id,
-      calculated_by: teacher.teacher_id,
-      final_score: result.finalScore,
-    },
-  });
+  await activityLogService.logFromRequest(req, 'CALCULATE_RESULT',
+    `${teacher.full_name} menghitung hasil ujian "${participant.exam.exam_name}" untuk peserta #${exam_participant_id}`,
+    {
+      metadata: {
+        exam_participant_id: parseInt(exam_participant_id),
+        exam_id: participant.exam.exam_id,
+        calculated_by: teacher.teacher_id,
+        final_score: result.finalScore,
+      },
+    });
 
   res.json({
     message: 'Hasil ujian berhasil dihitung',
@@ -257,19 +257,18 @@ const updateManualScore = asyncHandler(async (req, res) => {
   const recalculated = await calculateAndSaveResult(answer.exam_participant_id);
 
   // Activity log
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'UPDATE_MANUAL_SCORE',
-    description: `${teacher.full_name} mengubah nilai manual jawaban #${answer_id} menjadi ${manual_score}`,
-    metadata: {
-      answer_id: parseInt(answer_id),
-      manual_score: score,
-      exam_id: answer.exam_participant?.exam?.exam_id,
-      updated_by: teacher.teacher_id,
-      new_final_score: recalculated.finalScore,
-      new_status: recalculated.status,
-    },
-  });
+  await activityLogService.logFromRequest(req, 'UPDATE_MANUAL_SCORE',
+    `${teacher.full_name} mengubah nilai manual jawaban #${answer_id} menjadi ${manual_score}`,
+    {
+      metadata: {
+        answer_id: parseInt(answer_id),
+        manual_score: score,
+        exam_id: answer.exam_participant?.exam?.exam_id,
+        updated_by: teacher.teacher_id,
+        new_final_score: recalculated.finalScore,
+        new_status: recalculated.status,
+      },
+    });
 
   res.json({
     message: 'Nilai manual berhasil diupdate',
@@ -443,23 +442,7 @@ const getCompletedExams = asyncHandler(async (req, res) => {
   const [completedExams, total] = await Promise.all([
     prisma.exam.findMany({
       where,
-      include: {
-        teacher: {
-          select: { teacher_id: true, full_name: true },
-        },
-        _count: {
-          select: { exam_participants: true, exam_questions: true },
-        },
-        exam_participants: {
-          where: { exam_status: { in: ['COMPLETED', 'GRADED'] } },
-          include: {
-            exam_result: { select: { final_score: true, submit_date: true } },
-            student: {
-              select: { student_id: true, full_name: true, classroom: true },
-            },
-          },
-        },
-      },
+      include: EXAM_LIST_INCLUDE,
       orderBy: { end_date: 'desc' },
       skip,
       take,
@@ -467,44 +450,7 @@ const getCompletedExams = asyncHandler(async (req, res) => {
     prisma.exam.count({ where }),
   ]);
 
-  const formattedExams = completedExams.map(exam => {
-    const scoreList = exam.exam_participants
-      .filter(p => p.exam_result)
-      .map(p => p.exam_result.final_score);
-
-    return {
-      exam_id: exam.exam_id,
-      exam_name: exam.exam_name,
-      subject: exam.subject,
-      grade_level: exam.grade_level,
-      major: exam.major,
-      start_date: exam.start_date,
-      end_date: exam.end_date,
-      duration_minutes: exam.duration_minutes,
-      exam_status: exam.exam_status,
-      teacher: exam.teacher,
-      statistics: {
-        total_participants: exam._count.exam_participants,
-        total_completed: exam.exam_participants.length,
-        total_questions: exam._count.exam_questions,
-        highest_score: scoreList.length > 0 ? Math.round(Math.max(...scoreList) * 100) / 100 : 0,
-        lowest_score: scoreList.length > 0 ? Math.round(Math.min(...scoreList) * 100) / 100 : 0,
-        average_score: scoreList.length > 0
-          ? +(scoreList.reduce((a, b) => a + b, 0) / scoreList.length).toFixed(2)
-          : 0,
-      },
-      participant_results: exam.exam_participants.map(p => ({
-        exam_participant_id: p.exam_participant_id,
-        student: p.student,
-        exam_status: p.exam_status,
-        start_time: p.start_time,
-        end_time: p.end_time,
-        final_score: p.exam_result ? Math.round(p.exam_result.final_score * 100) / 100 : null,
-        submit_date: p.exam_result?.submit_date || null,
-      })),
-    };
-  });
-
+  const formattedExams = completedExams.map((exam) => formatExamForList(exam));
   res.json(paginatedResponse(formattedExams, total, page, limit));
 });
 
@@ -546,17 +492,7 @@ const getArchivedExams = asyncHandler(async (req, res) => {
   const [exams, total] = await Promise.all([
     prisma.exam.findMany({
       where,
-      include: {
-        teacher: { select: { teacher_id: true, full_name: true } },
-        _count: { select: { exam_participants: true, exam_questions: true } },
-        exam_participants: {
-          where: { exam_status: { in: ['COMPLETED', 'GRADED'] } },
-          include: {
-            exam_result: { select: { final_score: true, submit_date: true } },
-            student: { select: { student_id: true, full_name: true, classroom: true } },
-          },
-        },
-      },
+      include: EXAM_LIST_INCLUDE,
       orderBy: { teacher_submitted_at: 'desc' },
       skip,
       take,
@@ -564,36 +500,7 @@ const getArchivedExams = asyncHandler(async (req, res) => {
     prisma.exam.count({ where }),
   ]);
 
-  const formatted = exams.map(exam => {
-    const scoreList = exam.exam_participants.filter(p => p.exam_result).map(p => p.exam_result.final_score);
-    return {
-      exam_id: exam.exam_id,
-      exam_name: exam.exam_name,
-      subject: exam.subject,
-      grade_level: exam.grade_level,
-      major: exam.major,
-      start_date: exam.start_date,
-      end_date: exam.end_date,
-      teacher_submitted_at: exam.teacher_submitted_at,
-      teacher: exam.teacher,
-      statistics: {
-        total_participants: exam._count.exam_participants,
-        total_completed: exam.exam_participants.length,
-        total_questions: exam._count.exam_questions,
-        average_score: scoreList.length > 0 ? +(scoreList.reduce((a, b) => a + b, 0) / scoreList.length).toFixed(2) : 0,
-      },
-      participant_results: exam.exam_participants.map(p => ({
-        exam_participant_id: p.exam_participant_id,
-        student: p.student,
-        exam_status: p.exam_status,
-        start_time: p.start_time,
-        end_time: p.end_time,
-        final_score: p.exam_result ? Math.round(p.exam_result.final_score * 100) / 100 : null,
-        submit_date: p.exam_result?.submit_date || null,
-      })),
-    };
-  });
-
+  const formatted = exams.map((exam) => formatExamForList(exam, { includeArchivedAt: true }));
   res.json(paginatedResponse(formatted, total, page, limit));
 });
 

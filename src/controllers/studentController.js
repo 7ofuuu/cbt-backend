@@ -191,15 +191,12 @@ const startExam = asyncHandler(async (req, res) => {
   });
 
   // Log activity
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    exam_participant_id: examParticipant.exam_participant_id,
-    activity_type: 'START_EXAM',
-    description: `Student started exam: ${exam.exam_name}`,
-    ip_address: activityLogService.getIpAddress(req),
-    user_agent: activityLogService.getUserAgent(req),
-    metadata: { exam_id: exam.exam_id, exam_participant_id: examParticipant.exam_participant_id },
-  });
+  await activityLogService.logFromRequest(req, 'START_EXAM',
+    `Student started exam: ${exam.exam_name}`,
+    {
+      exam_participant_id: examParticipant.exam_participant_id,
+      metadata: { exam_id: exam.exam_id, exam_participant_id: examParticipant.exam_participant_id },
+    });
 
   res.json({
     exam_participant_id: examParticipant.exam_participant_id,
@@ -403,19 +400,12 @@ const finishExam = asyncHandler(async (req, res) => {
   }
 
   // Log activity
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    exam_participant_id: parseInt(exam_participant_id),
-    activity_type: 'FINISH_EXAM',
-    description: `Student finished exam: ${participant.exam.exam_name}`,
-    ip_address: activityLogService.getIpAddress(req),
-    user_agent: activityLogService.getUserAgent(req),
-    metadata: {
-      exam_id: participant.exam.exam_id,
-      final_score: finalScore,
-      has_essay: hasEssay,
-    },
-  });
+  await activityLogService.logFromRequest(req, 'FINISH_EXAM',
+    `Student finished exam: ${participant.exam.exam_name}`,
+    {
+      exam_participant_id: parseInt(exam_participant_id),
+      metadata: { exam_id: participant.exam.exam_id, final_score: finalScore, has_essay: hasEssay },
+    });
 
   res.json({
     message: 'Ujian berhasil diselesaikan',
@@ -469,15 +459,12 @@ const reportViolation = asyncHandler(async (req, res) => {
   });
 
   // Log violation
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    exam_participant_id: parseInt(exam_participant_id),
-    activity_type: 'EXAM_VIOLATION',
-    description: `Violation reported: ${violation_type}`,
-    ip_address: activityLogService.getIpAddress(req),
-    user_agent: activityLogService.getUserAgent(req),
-    metadata: { violation_type, details, exam_participant_id: parseInt(exam_participant_id) },
-  });
+  await activityLogService.logFromRequest(req, 'EXAM_VIOLATION',
+    `Violation reported: ${violation_type}`,
+    {
+      exam_participant_id: parseInt(exam_participant_id),
+      metadata: { violation_type, details, exam_participant_id: parseInt(exam_participant_id) },
+    });
 
   res.json({
     message: 'Pelanggaran dilaporkan',

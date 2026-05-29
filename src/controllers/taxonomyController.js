@@ -16,6 +16,24 @@
  */
 const prisma = require('../config/db');
 const { asyncHandler, AppError } = require('../utils/asyncHandler');
+const { cascadeRename } = require('../services/taxonomyCascadeService');
+
+// Targets for the cascade rename — kept here next to the controller because
+// they describe *which historical snapshots this taxonomy lives in*, which
+// is controller-level knowledge, not generic service knowledge.
+const SUBJECT_TARGETS = [
+  { model: 'exam', key: 'exams' },
+  { model: 'questionBank', key: 'question_banks' },
+  { model: 'question', key: 'questions' },
+  { model: 'teacher', key: 'teachers' },
+];
+const GRADE_LEVEL_TARGETS = [
+  { model: 'exam', key: 'exams' },
+  { model: 'questionBank', key: 'question_banks' },
+  { model: 'question', key: 'questions' },
+  { model: 'student', key: 'students' },
+];
+const MAJOR_TARGETS = GRADE_LEVEL_TARGETS;
 
 // ---------------------------------------------------------------------------
 // Combined GET — single call for the dashboard's TaxonomyContext.
@@ -76,26 +94,17 @@ const updateSubject = asyncHandler(async (req, res) => {
     throw e;
   });
 
-  // Cascade rename: also rewrite the string snapshot wherever the OLD name
-  // appears, so historical exams/banks/questions/teachers keep linking by
-  // label rather than dangling at a renamed value.
-  let cascade = null;
-  if (cascade_rename && name && name.trim() !== existing.name) {
-    const oldName = existing.name;
-    const newName = name.trim();
-    const [examUp, bankUp, qUp, teacherUp] = await prisma.$transaction([
-      prisma.exam.updateMany({ where: { subject: oldName }, data: { subject: newName } }),
-      prisma.questionBank.updateMany({ where: { subject: oldName }, data: { subject: newName } }),
-      prisma.question.updateMany({ where: { subject: oldName }, data: { subject: newName } }),
-      prisma.teacher.updateMany({ where: { subject: oldName }, data: { subject: newName } }),
-    ]);
-    cascade = {
-      exams: examUp.count,
-      question_banks: bankUp.count,
-      questions: qUp.count,
-      teachers: teacherUp.count,
-    };
-  }
+  // Cascade rename: rewrite the string snapshot on historical rows so they
+  // still point at the renamed taxonomy value instead of dangling at the old
+  // one. Skipped unless the caller opts in.
+  const cascade = cascade_rename
+    ? await cascadeRename({
+        field: 'subject',
+        oldValue: existing.name,
+        newValue: name?.trim(),
+        targets: SUBJECT_TARGETS,
+      })
+    : null;
 
   res.json({ subject: updated, cascade });
 });
@@ -154,23 +163,14 @@ const updateGradeLevel = asyncHandler(async (req, res) => {
     throw e;
   });
 
-  let cascade = null;
-  if (cascade_rename && value && value.trim() !== existing.value) {
-    const oldValue = existing.value;
-    const newValue = value.trim();
-    const [examUp, bankUp, qUp, studentUp] = await prisma.$transaction([
-      prisma.exam.updateMany({ where: { grade_level: oldValue }, data: { grade_level: newValue } }),
-      prisma.questionBank.updateMany({ where: { grade_level: oldValue }, data: { grade_level: newValue } }),
-      prisma.question.updateMany({ where: { grade_level: oldValue }, data: { grade_level: newValue } }),
-      prisma.student.updateMany({ where: { grade_level: oldValue }, data: { grade_level: newValue } }),
-    ]);
-    cascade = {
-      exams: examUp.count,
-      question_banks: bankUp.count,
-      questions: qUp.count,
-      students: studentUp.count,
-    };
-  }
+  const cascade = cascade_rename
+    ? await cascadeRename({
+        field: 'grade_level',
+        oldValue: existing.value,
+        newValue: value?.trim(),
+        targets: GRADE_LEVEL_TARGETS,
+      })
+    : null;
 
   res.json({ grade_level: updated, cascade });
 });
@@ -229,23 +229,14 @@ const updateMajor = asyncHandler(async (req, res) => {
     throw e;
   });
 
-  let cascade = null;
-  if (cascade_rename && value && value.trim() !== existing.value) {
-    const oldValue = existing.value;
-    const newValue = value.trim();
-    const [examUp, bankUp, qUp, studentUp] = await prisma.$transaction([
-      prisma.exam.updateMany({ where: { major: oldValue }, data: { major: newValue } }),
-      prisma.questionBank.updateMany({ where: { major: oldValue }, data: { major: newValue } }),
-      prisma.question.updateMany({ where: { major: oldValue }, data: { major: newValue } }),
-      prisma.student.updateMany({ where: { major: oldValue }, data: { major: newValue } }),
-    ]);
-    cascade = {
-      exams: examUp.count,
-      question_banks: bankUp.count,
-      questions: qUp.count,
-      students: studentUp.count,
-    };
-  }
+  const cascade = cascade_rename
+    ? await cascadeRename({
+        field: 'major',
+        oldValue: existing.value,
+        newValue: value?.trim(),
+        targets: MAJOR_TARGETS,
+      })
+    : null;
 
   res.json({ major: updated, cascade });
 });

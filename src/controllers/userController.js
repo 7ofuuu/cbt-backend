@@ -371,12 +371,9 @@ const scoreAnswer = asyncHandler(async (req, res) => {
   const recalculated = await calculateAndSaveResult(answer.exam_participant_id);
 
   // Audit log
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'UPDATE_MANUAL_SCORE',
-    description: `Teacher updated manual score for answer ${answer_id} to ${manual_score}`,
-    metadata: { answer_id: parseInt(answer_id), manual_score: score },
-  });
+  await activityLogService.logFromRequest(req, 'UPDATE_MANUAL_SCORE',
+    `Teacher updated manual score for answer ${answer_id} to ${manual_score}`,
+    { metadata: { answer_id: parseInt(answer_id), manual_score: score } });
 
   res.json({ message: 'Nilai manual berhasil diupdate', answer: updated, recalculated: { final_score: recalculated.finalScore, status: recalculated.status } });
 });
@@ -522,19 +519,16 @@ const batchDeleteUsers = asyncHandler(async (req, res) => {
   });
 
   // Activity log
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'BATCH_DELETE_USERS',
-    description: `Admin batch-deleted ${deleted.count} users${grade_level ? ` (grade: ${grade_level})` : ''}`,
-    ip_address: activityLogService.getIpAddress(req),
-    user_agent: activityLogService.getUserAgent(req),
-    metadata: {
-      deleted_count: deleted.count,
-      deleted_ids: deletableIds,
-      skipped: protectedUsers.map(u => u.username),
-      filter: { grade_level, major, classroom },
-    },
-  });
+  await activityLogService.logFromRequest(req, 'BATCH_DELETE_USERS',
+    `Admin batch-deleted ${deleted.count} users${grade_level ? ` (grade: ${grade_level})` : ''}`,
+    {
+      metadata: {
+        deleted_count: deleted.count,
+        deleted_ids: deletableIds,
+        skipped: protectedUsers.map(u => u.username),
+        filter: { grade_level, major, classroom },
+      },
+    });
 
   res.json({
     message: `${deleted.count} user berhasil dihapus`,
