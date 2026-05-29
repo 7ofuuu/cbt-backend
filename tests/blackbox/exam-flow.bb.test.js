@@ -7,6 +7,7 @@
 jest.mock('../../src/config/db');
 jest.mock('../../src/services/activityLogService', () => ({
   createLog: jest.fn().mockResolvedValue(undefined),
+  logFromRequest: jest.fn().mockResolvedValue(undefined),
   getIpAddress: jest.fn().mockReturnValue('127.0.0.1'),
   getUserAgent: jest.fn().mockReturnValue('supertest'),
 }));
