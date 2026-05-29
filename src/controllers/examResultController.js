@@ -437,6 +437,7 @@ const getCompletedExams = asyncHandler(async (req, res) => {
   const where = {
     ...subjectFilter,
     exam_status: 'ENDED',
+    teacher_submitted_at: null,
   };
 
   const [completedExams, total] = await Promise.all([
@@ -507,6 +508,95 @@ const getCompletedExams = asyncHandler(async (req, res) => {
   res.json(paginatedResponse(formattedExams, total, page, limit));
 });
 
+// POST /api/exam-results/:examId/submit - Archive exam (removes from active results list)
+const submitExam = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
+  const examId = parseInt(req.params.examId);
+
+  const exam = await prisma.exam.findUnique({
+    where: { exam_id: examId },
+    select: { exam_id: true, exam_status: true, teacher_submitted_at: true, subject: true, teacher: { select: { subject: true } } },
+  });
+
+  if (!exam) throw new AppError('Ujian tidak ditemukan', 404);
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
+  if (exam.exam_status !== 'ENDED') throw new AppError('Ujian harus berstatus ENDED sebelum dapat disubmit', 400);
+  if (exam.teacher_submitted_at) throw new AppError('Ujian sudah pernah disubmit', 400);
+
+  await prisma.exam.update({
+    where: { exam_id: examId },
+    data: { teacher_submitted_at: new Date() },
+  });
+
+  res.json({ success: true, message: 'Ujian berhasil disubmit dan dipindahkan ke arsip' });
+});
+
+// GET /api/exam-results/archived-exams - Exams submitted by teacher (archived)
+const getArchivedExams = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
+  const { skip, take, page, limit } = buildPagination(req.query, 10);
+  const subjectFilter = buildSubjectFilter(teacher);
+
+  const where = {
+    ...subjectFilter,
+    exam_status: 'ENDED',
+    teacher_submitted_at: { not: null },
+  };
+
+  const [exams, total] = await Promise.all([
+    prisma.exam.findMany({
+      where,
+      include: {
+        teacher: { select: { teacher_id: true, full_name: true } },
+        _count: { select: { exam_participants: true, exam_questions: true } },
+        exam_participants: {
+          where: { exam_status: { in: ['COMPLETED', 'GRADED'] } },
+          include: {
+            exam_result: { select: { final_score: true, submit_date: true } },
+            student: { select: { student_id: true, full_name: true, classroom: true } },
+          },
+        },
+      },
+      orderBy: { teacher_submitted_at: 'desc' },
+      skip,
+      take,
+    }),
+    prisma.exam.count({ where }),
+  ]);
+
+  const formatted = exams.map(exam => {
+    const scoreList = exam.exam_participants.filter(p => p.exam_result).map(p => p.exam_result.final_score);
+    return {
+      exam_id: exam.exam_id,
+      exam_name: exam.exam_name,
+      subject: exam.subject,
+      grade_level: exam.grade_level,
+      major: exam.major,
+      start_date: exam.start_date,
+      end_date: exam.end_date,
+      teacher_submitted_at: exam.teacher_submitted_at,
+      teacher: exam.teacher,
+      statistics: {
+        total_participants: exam._count.exam_participants,
+        total_completed: exam.exam_participants.length,
+        total_questions: exam._count.exam_questions,
+        average_score: scoreList.length > 0 ? +(scoreList.reduce((a, b) => a + b, 0) / scoreList.length).toFixed(2) : 0,
+      },
+      participant_results: exam.exam_participants.map(p => ({
+        exam_participant_id: p.exam_participant_id,
+        student: p.student,
+        exam_status: p.exam_status,
+        start_time: p.start_time,
+        end_time: p.end_time,
+        final_score: p.exam_result ? Math.round(p.exam_result.final_score * 100) / 100 : null,
+        submit_date: p.exam_result?.submit_date || null,
+      })),
+    };
+  });
+
+  res.json(paginatedResponse(formatted, total, page, limit));
+});
+
 module.exports = {
   getResultByParticipant,
   getResultByExam,
@@ -515,4 +605,6 @@ module.exports = {
   updateManualScore,
   getDetailedResult,
   getCompletedExams,
+  submitExam,
+  getArchivedExams,
 };

@@ -120,6 +120,7 @@ exports.getExamParticipants = asyncHandler(async (req, res) => {
     if (p.is_blocked) statusLabel = 'Blocked';
     else if (p.exam_status === 'IN_PROGRESS') statusLabel = 'On Progress';
     else if (p.exam_status === 'COMPLETED') statusLabel = 'Submitted';
+    else if (p.exam_status === 'GRADED') statusLabel = 'Submitted';
 
     return {
       exam_participant_id: p.exam_participant_id,
@@ -174,6 +175,7 @@ exports.getParticipantDetail = asyncHandler(async (req, res) => {
   if (ep.is_blocked) statusLabel = 'Blocked';
   else if (ep.exam_status === 'IN_PROGRESS') statusLabel = 'On Progress';
   else if (ep.exam_status === 'COMPLETED') statusLabel = 'Submitted';
+  else if (ep.exam_status === 'GRADED') statusLabel = 'Submitted';
 
   res.json({
     success: true,

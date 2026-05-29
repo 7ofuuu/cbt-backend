@@ -339,12 +339,13 @@ const finishExam = asyncHandler(async (req, res) => {
 
   if (!exam_participant_id) throw new AppError('exam_participant_id wajib diisi', 400);
 
-  // Atomically update status to prevent double-finish
+  // Atomically update status to prevent double-finish; skip if participant is blocked
   const updateResult = await prisma.examParticipant.updateMany({
     where: {
       exam_participant_id: parseInt(exam_participant_id),
       student_id: student.student_id,
       exam_status: 'IN_PROGRESS',
+      is_blocked: false,
     },
     data: {
       exam_status: 'COMPLETED',
@@ -353,6 +354,12 @@ const finishExam = asyncHandler(async (req, res) => {
   });
 
   if (updateResult.count === 0) {
+    // Distinguish blocked from already-finished so the client can react appropriately
+    const ep = await prisma.examParticipant.findFirst({
+      where: { exam_participant_id: parseInt(exam_participant_id), student_id: student.student_id },
+      select: { is_blocked: true, exam_status: true },
+    });
+    if (ep?.is_blocked) throw new AppError('Ujian tidak dapat diselesaikan karena peserta diblokir', 403);
     throw new AppError('Ujian tidak ditemukan, bukan milik Anda, atau sudah selesai', 400);
   }
 

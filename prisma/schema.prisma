@@ -226,6 +226,7 @@ model Exam {
   duration_minutes     Int
   is_shuffle_questions Boolean            @default(false)
   exam_status          ExamStatus         @default(SCHEDULED)
+  teacher_submitted_at DateTime?
   created_at           DateTime           @default(now())
   updated_at           DateTime           @updatedAt
   teacher_id           Int
