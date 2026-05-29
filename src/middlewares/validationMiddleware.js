@@ -125,9 +125,36 @@ const validateLogin = (req, res, next) => {
   next();
 };
 
-module.exports = { 
-  verifyToken, 
-  checkRole, 
+// Generic Joi schema validator factory — use for new routes so the
+// controller body stays focused on business logic. Defaults to req.body
+// but works on any request property (query, params).
+//   router.post('/x', validate(schemaA), handler)
+//   router.get('/y', validate(schemaB, 'query'), handler)
+const validate = (schema, source = 'body') => (req, res, next) => {
+  const { error, value } = schema.validate(req[source], { abortEarly: false, stripUnknown: true });
+  if (error) {
+    return res.status(400).json({ error: error.details.map(d => d.message).join('; ') });
+  }
+  req[source] = value;
+  next();
+};
+
+// Composed middleware shortcuts for the most common access patterns.
+// Example: `router.post('/x', adminOnly, handler)`. Use the array form so
+// Express expands it inline like any other middleware list.
+const adminOnly = [verifyToken, checkRole('admin')];
+const teacherOnly = [verifyToken, checkRole('teacher')];
+const studentOnly = [verifyToken, checkRole('student')];
+const adminOrTeacher = [verifyToken, checkRole('admin', 'teacher')];
+
+module.exports = {
+  verifyToken,
+  checkRole,
   validateRegister,
-  validateLogin 
+  validateLogin,
+  validate,
+  adminOnly,
+  teacherOnly,
+  studentOnly,
+  adminOrTeacher,
 };
