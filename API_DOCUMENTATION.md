@@ -52,11 +52,14 @@ Authorization: Bearer <token>
 | Student Exam | 5 | Yes (Student) | Students |
 | User Management | 15 | Yes (Admin/Teacher) | Admin/Teachers |
 | Activity Monitoring | 6 | Yes (Admin) | Admin |
-| Exam Results | 7 | Yes | Students/Teachers |
+| Exam Results | 9 | Yes | Students/Teachers |
 | Activity Logs | 5 | Yes | Admin/Teachers |
 | School Profile | 2 | No/Yes (Admin) | All/Admin |
 | Analytics | 4 | Yes (Teacher) | Teachers |
-| **TOTAL** | **77** | — | — |
+| Taxonomy | 10 | No/Yes (Admin) | All/Admin |
+| Upload | 2 | Yes (Admin/Teacher) | Admin/Teachers |
+| Misc | 1 | No | All |
+| **TOTAL** | **92** | — | — |
 
 ---
 
@@ -1327,6 +1330,41 @@ Update manual score for an essay answer. **Automatically recalculates** `final_s
 
 ---
 
+### POST `/api/exam-results/:examId/submit` — Teacher
+
+Submit a completed exam to the archive. Used by the teacher Hasil Ujian page once grading is finalised — archived exams move from the **Aktif** tab to the **Arsip** tab.
+
+**Middleware:** `verifyToken`, `checkRole('teacher')`, `resolveTeacher`
+
+**Preconditions:**
+- Exam must be in `ENDED` status (auto-set by the expiry scheduler once `end_date` passes)
+- Exam must not already be archived (`teacher_submitted_at` must be null)
+
+**Response (200):**
+
+```json
+{ "success": true, "message": "Ujian berhasil disubmit dan dipindahkan ke arsip" }
+```
+
+**Errors:**
+- `400` — exam not yet `ENDED` or already archived
+- `403` — teacher cannot access this subject
+
+Internally sets `Exam.teacher_submitted_at = now()`, which excludes the exam from `GET /completed-exams` and includes it in `GET /archived-exams`.
+
+---
+
+### GET `/api/exam-results/archived-exams` — Teacher
+
+List archived exams (those submitted via the endpoint above). Mirrors `GET /completed-exams` but filters on `teacher_submitted_at IS NOT NULL` and orders by archive timestamp descending.
+
+**Query Parameters:**
+- `page`, `limit` (optional, defaults `1` / `10`)
+
+**Response (200):** Same paginated shape as `completed-exams`, with each row additionally carrying `teacher_submitted_at`. The statistics and participant breakdown payload come from the shared `formatExamForList` helper, so the two endpoints stay in sync.
+
+---
+
 ## 8. Activity Logs (`/api/activity-logs`) — Admin & Teacher
 
 All routes require `verifyToken` + `checkRole(['admin', 'teacher'])`.
@@ -1518,6 +1556,177 @@ Get cross-subject audit overview for coordinator only.
 
 ---
 
+## 11. Taxonomy (`/api/taxonomy`)
+
+Manages dynamic master data: **subjects**, **grade levels**, and **majors**. The dashboard `master-data` page writes here; dropdowns across dashboard and Flutter read from the public `GET` endpoint instead of hardcoded constants, so admin edits propagate without a redeploy.
+
+Deletes are **soft** (`is_active = false`). Historical exam/student/teacher rows carry the value as a string snapshot and keep working even after a taxonomy entry is deactivated.
+
+### GET `/api/taxonomy`
+
+Combined fetch of all three taxonomies in one call. **Public** — no auth required.
+
+**Query Parameters:**
+- `include_inactive` (optional) — set to `true` to receive soft-deleted rows (used by the master-data UI)
+
+**Response (200):**
+
+```json
+{
+  "subjects": [
+    { "subject_id": 1, "name": "Matematika", "color": "#3b82f6", "sort_order": 0, "is_active": true }
+  ],
+  "grade_levels": [
+    { "grade_level_id": 1, "value": "X", "label": "Kelas 10", "sort_order": 0, "is_active": true }
+  ],
+  "majors": [
+    { "major_id": 1, "value": "IPA", "label": "IPA", "sort_order": 0, "is_active": true }
+  ]
+}
+```
+
+---
+
+### POST `/api/taxonomy/subjects` — Admin
+
+**Request Body:**
+
+```json
+{ "name": "Bahasa Mandarin", "color": "#ec4899", "sort_order": 14 }
+```
+
+`color` accepts a HEX (`#rrggbb`) preferred, or a legacy Tailwind palette name for backward compat. Stored verbatim and resolved by the dashboard `useSubjectTheme` hook.
+
+---
+
+### PUT `/api/taxonomy/subjects/:id` — Admin
+
+Supports an opt-in `cascade_rename: true` flag that rewrites the subject string snapshot wherever it appears on historical `Exam`, `QuestionBank`, `Question`, and `Teacher` rows. Returns a `cascade` summary so the dashboard can surface the affected count in a toast.
+
+**Request Body:**
+
+```json
+{ "name": "Matematika Wajib", "color": "#3b82f6", "cascade_rename": true }
+```
+
+**Response (200):**
+
+```json
+{
+  "subject": { "subject_id": 1, "name": "Matematika Wajib", "...": "..." },
+  "cascade": { "exams": 4, "question_banks": 6, "questions": 120, "teachers": 1 }
+}
+```
+
+When `cascade_rename` is omitted or `false`, `cascade` is `null` and only future dropdowns reflect the rename.
+
+---
+
+### DELETE `/api/taxonomy/subjects/:id` — Admin
+
+Soft-deactivate (sets `is_active = false`).
+
+---
+
+### POST `/api/taxonomy/grade-levels` — Admin
+
+```json
+{ "value": "XIII", "label": "Kelas 13", "sort_order": 3 }
+```
+
+`value` is the snapshot stored on dependent rows; `label` is for display. Mirrors the Subject cascade behaviour on PUT.
+
+---
+
+### PUT `/api/taxonomy/grade-levels/:id` — Admin
+
+Cascade targets when `cascade_rename: true`: `Exam`, `QuestionBank`, `Question`, `Student`.
+
+---
+
+### DELETE `/api/taxonomy/grade-levels/:id` — Admin
+
+Soft-deactivate.
+
+---
+
+### POST `/api/taxonomy/majors` — Admin
+
+```json
+{ "value": "MIPA", "label": "MIPA", "sort_order": 0 }
+```
+
+---
+
+### PUT `/api/taxonomy/majors/:id` — Admin
+
+Cascade targets when `cascade_rename: true`: `Exam`, `QuestionBank`, `Question`, `Student`.
+
+---
+
+### DELETE `/api/taxonomy/majors/:id` — Admin
+
+Soft-deactivate.
+
+---
+
+## 12. Upload (`/api/upload`)
+
+Image upload pipeline backed by `multer` disk storage. Files land under `cbt-backend/uploads/<bucket>/` with a timestamp + random filename so collisions are impossible. The server serves these back as static files under `/uploads/...` with `Cross-Origin-Resource-Policy: cross-origin` so the dashboard (different port) can fetch them.
+
+**Limits:**
+- Max size: **5 MB** per file
+- Allowed MIME: `image/png`, `image/jpeg`, `image/webp`, `image/gif`
+
+### POST `/api/upload/logo` — Admin
+
+Upload the school logo. Mounted before the school-profile PUT so the admin can upload, copy the returned URL into `logo_url`, and save.
+
+**Headers:** `Content-Type: multipart/form-data`
+
+**Form field:** `file` — the image binary
+
+**Response (201):**
+
+```json
+{
+  "url": "/uploads/logos/1780046533418-tcot3epi.png",
+  "filename": "1780046533418-tcot3epi.png",
+  "size": 24576,
+  "mimetype": "image/png"
+}
+```
+
+The returned `url` is **path-relative** (no host) so it stays correct on localhost, ngrok, and production. Clients prepend the API origin themselves when rendering (the dashboard `resolvePreviewUrl` helper and Flutter `Env.resolveAssetUrl` do this).
+
+---
+
+### POST `/api/upload/question-image` — Teacher or Admin
+
+Upload an attachment for a question. Used by the teacher question authoring page; the returned URL is saved on `Question.question_image`.
+
+Same request/response shape as logo upload, but files land under `/uploads/questions/`.
+
+**Error responses:**
+- `400` — wrong MIME type (`Format file tidak didukung`)
+- `400` — over 5 MB (multer `LIMIT_FILE_SIZE`)
+
+---
+
+## 13. Misc
+
+### GET `/api/time`
+
+Returns trusted server time. Used by the Flutter app and dashboard to validate exam start/end windows and detect device clock tampering. No auth, no rate limit.
+
+**Response (200):**
+
+```json
+{ "now": "2025-12-30T14:32:11.408Z" }
+```
+
+---
+
 ## Global Deadline System
 
 Exam timing uses a **dual timer system**:
@@ -1564,7 +1773,7 @@ All errors follow:
 
 ---
 
-## Endpoint Summary (77 total)
+## Endpoint Summary (92 total)
 
 | # | Method | Route | Auth |
 |---|--------|-------|------|
@@ -1645,6 +1854,22 @@ All errors follow:
 | 75 | GET | `/api/analytics/dashboard-summary` | teacher |
 | 76 | GET | `/api/analytics/teacher-performance` | teacher |
 | 77 | GET | `/api/analytics/coordinator-audit` | teacher (coordinator) |
+| 78 | POST | `/api/exam-results/:examId/submit` | teacher |
+| 79 | GET | `/api/exam-results/archived-exams` | teacher |
+| 80 | GET | `/api/taxonomy` | — |
+| 81 | POST | `/api/taxonomy/subjects` | admin |
+| 82 | PUT | `/api/taxonomy/subjects/:id` | admin |
+| 83 | DELETE | `/api/taxonomy/subjects/:id` | admin |
+| 84 | POST | `/api/taxonomy/grade-levels` | admin |
+| 85 | PUT | `/api/taxonomy/grade-levels/:id` | admin |
+| 86 | DELETE | `/api/taxonomy/grade-levels/:id` | admin |
+| 87 | POST | `/api/taxonomy/majors` | admin |
+| 88 | PUT | `/api/taxonomy/majors/:id` | admin |
+| 89 | DELETE | `/api/taxonomy/majors/:id` | admin |
+| 90 | POST | `/api/upload/logo` | admin |
+| 91 | POST | `/api/upload/question-image` | admin/teacher |
+| 92 | GET | `/api/time` | — |
+
 
 ---
 
