@@ -29,7 +29,8 @@ REST API server for Computer-Based Test (CBT) system. Provides 92 endpoints for 
 - **Participant Tracking** — Monitor exam participation status
 
 ### Exam Taking (Student)
-- **Start Exam** — Begin exam session at global `end_date`
+- **Encrypted Pre-Download** — Download the exam package (questions, no answer keys) from H-1 as a sealed envelope; opened locally with the proctor-announced password (PBKDF2-HMAC-SHA256 → AES-256-GCM)
+- **Start Exam** — Begin exam session online (records status + `start_time`); questions come from the decrypted package
 - **Auto-Save Answers** — Submit answers to server on selection
 - **Question Navigation** — View all questions, track answered/unanswered
 - **Auto-Finish** — Exam auto-finishes when deadline expires (server-side)
@@ -272,11 +273,11 @@ npx prisma migrate resolve --rolled-back # Fix migration conflicts
 
 **Base URL:** `http://localhost:3000/api`
 
-**92 Endpoints** organized in 13 route groups:
+**93 Endpoints** organized in 13 route groups:
 1. **Auth** (`/auth`) — Register, login, logout, profile, password change
 2. **Questions** (`/questions`) — Question banks, CRUD questions
 3. **Exams** (`/exams`) — Exam CRUD, assign questions/students
-4. **Student Exams** (`/student`) — Start exam, submit answers, finish exam
+4. **Student Exams** (`/student`) — Prefetch encrypted package, start exam, submit answers, finish exam
 5. **Users** (`/users`) — User management, role changes, batch import
 6. **Activities** (`/activities`) — Real-time exam monitoring, block/unblock
 7. **Activity Logs** (`/activity-logs`) — Query login/exam events
