@@ -85,14 +85,9 @@ const updateSchoolProfile = asyncHandler(async (req, res) => {
   });
 
   // Activity log
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'UPDATE_SCHOOL_PROFILE',
-    description: `Admin memperbarui profil sekolah: ${school_name.trim()}`,
-    ip_address: activityLogService.getIpAddress(req),
-    user_agent: activityLogService.getUserAgent(req),
-    metadata: { school_name: school_name.trim(), updated_fields: Object.keys(req.body) },
-  });
+  await activityLogService.logFromRequest(req, 'UPDATE_SCHOOL_PROFILE',
+    `Admin memperbarui profil sekolah: ${school_name.trim()}`,
+    { metadata: { school_name: school_name.trim(), updated_fields: Object.keys(req.body) } });
 
   res.json({ message: 'Profil sekolah berhasil diperbarui', data: profile });
 });

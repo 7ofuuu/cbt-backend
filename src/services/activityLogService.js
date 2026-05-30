@@ -152,8 +152,28 @@ const getUserAgent = (req) => {
   return req.headers['user-agent'] || null;
 };
 
+/**
+ * Convenience wrapper that fills in the request-derived fields
+ * (user_id, ip_address, user_agent) so callers can write a single line
+ * instead of the four-field object literal that every controller used.
+ *
+ *   await logFromRequest(req, 'CREATE_UJIAN', `Buat ujian ${name}`, { exam_id });
+ *
+ * Caller can still pass `exam_participant_id` in the extras when needed.
+ */
+const logFromRequest = (req, activity_type, description, extras = {}) =>
+  createLog({
+    user_id: req.user?.id ?? null,
+    activity_type,
+    description,
+    ip_address: getIpAddress(req),
+    user_agent: getUserAgent(req),
+    ...extras,
+  });
+
 module.exports = {
   createLog,
+  logFromRequest,
   getLogsByUser,
   getLogsByExamParticipant,
   getLogsByType,

@@ -1,6 +1,6 @@
 # CBT Backend API
 
-REST API server for Computer-Based Test (CBT) system. Provides 77 endpoints for authentication, question management, exam administration, and student exam operations.
+REST API server for Computer-Based Test (CBT) system. Provides 92 endpoints for authentication, question management, exam administration, student exam operations, dynamic taxonomy, and image upload.
 
 **Built with:** Node.js 18+ | Express.js 5 | Prisma 6 | MySQL 8
 
@@ -60,6 +60,22 @@ REST API server for Computer-Based Test (CBT) system. Provides 77 endpoints for 
 - **Public Endpoint** — Fetch school name, logo, contact info
 - **Admin Update** — Update school identity information
 
+### Dynamic Taxonomy
+- **Subjects / Grade Levels / Majors** — Stored as editable rows instead of hardcoded constants
+- **Public Read** — Dashboard and Flutter pull dropdown options from one endpoint
+- **Soft Delete** — Deactivated rows still resolve on historical exam/student data
+- **Opt-in Cascade Rename** — Admin can propagate a rename across `Exam`, `QuestionBank`, `Question`, `Teacher`, and `Student` snapshots in a single transaction
+
+### File Upload
+- **Multer Disk Storage** — Image-only, 5 MB cap, PNG / JPG / WEBP / GIF
+- **Two Buckets** — `uploads/logos/` (admin only) and `uploads/questions/` (teacher + admin)
+- **Static Serving** — `/uploads/*` served with `Cross-Origin-Resource-Policy: cross-origin` so the dashboard on a different port can render the images
+
+### Exam Archival
+- **Teacher Submit** — Once grading is final, teacher submits the exam to move it from active to archive
+- **`teacher_submitted_at`** — Timestamp gates inclusion in the active vs archived list endpoints
+- **Shared Formatter** — `formatExamForList` keeps the active and archived projections identical
+
 ---
 
 ## Tech Stack
@@ -73,7 +89,10 @@ REST API server for Computer-Based Test (CBT) system. Provides 77 endpoints for 
 | Auth | JWT (jsonwebtoken) | Latest |
 | Encryption | bcryptjs | Latest |
 | Validation | Joi | Latest |
-| Task Scheduling | node-cron | Latest |
+| File Upload | multer | Latest |
+| Security | helmet (CSP disabled, CORP cross-origin) | Latest |
+| Task Scheduling | setInterval (60 s tick) | — |
+| Testing | Jest + supertest | Latest |
 
 ---
 
@@ -133,14 +152,17 @@ npx prisma db seed
 ```
 
 **After Seeding:**
+- School profile (singleton, id = 1)
+- Taxonomy: 14 subjects, 3 grade levels, 3 majors
 - 3 Admins (1 Super Admin: `admin1`)
-- 8 Teachers
+- 8 Teachers (1 coordinator)
 - 108 Students
 - 36 Question Banks with 720 Questions
-- 13 Sample Exams
-- ~156 Exam Participants
+- 13 Sample Exams (mixed `SCHEDULED` / `ONGOING` / `ENDED`)
+- ~156 Exam Participants (including 5 blocked)
 - ~510 Answers
 - 25 Exam Results
+- ~142 Activity Logs
 
 **Reset Database (⚠️ Deletes all data):**
 ```bash
@@ -250,7 +272,7 @@ npx prisma migrate resolve --rolled-back # Fix migration conflicts
 
 **Base URL:** `http://localhost:3000/api`
 
-**77 Endpoints** organized in 10 route groups:
+**92 Endpoints** organized in 13 route groups:
 1. **Auth** (`/auth`) — Register, login, logout, profile, password change
 2. **Questions** (`/questions`) — Question banks, CRUD questions
 3. **Exams** (`/exams`) — Exam CRUD, assign questions/students
@@ -258,9 +280,12 @@ npx prisma migrate resolve --rolled-back # Fix migration conflicts
 5. **Users** (`/users`) — User management, role changes, batch import
 6. **Activities** (`/activities`) — Real-time exam monitoring, block/unblock
 7. **Activity Logs** (`/activity-logs`) — Query login/exam events
-8. **Exam Results** (`/exam-results`) — Grade essays, finalize scores
+8. **Exam Results** (`/exam-results`) — Grade essays, finalize scores, submit to archive
 9. **School Profile** (`/school-profile`) — Fetch/update school info
 10. **Analytics** (`/analytics`) — Teacher performance, question stats
+11. **Taxonomy** (`/taxonomy`) — Dynamic subjects / grade levels / majors with cascade rename
+12. **Upload** (`/upload`) — Logo + question image upload (multer disk storage)
+13. **Misc** (`/time`) — Trusted server time for client clock validation
 
 **All endpoints (except `/auth/login` and `/auth/register`) require JWT:**
 ```
@@ -314,11 +339,13 @@ cbt-backend/
 │   │   ├── schoolProfileController.js
 │   │   └── analyticsController.js
 │   │
-│   ├── middlewares/                 # Auth, validation, role checks
-│   │   ├── validationMiddleware.js  # JWT verify, role check, Joi validation
-│   │   └── resolveRole.js           # Resolve teacher/student profile from JWT
+│   ├── middlewares/                       # Auth, validation, role checks, uploads
+│   │   ├── validationMiddleware.js        # JWT verify, role check, Joi validate(),
+│   │   │                                  # adminOnly / teacherOnly / studentOnly shortcuts
+│   │   ├── resolveRole.js                 # Resolve teacher/student profile from JWT
+│   │   └── uploadMiddleware.js            # Multer disk storage, image-only, 5 MB cap
 │   │
-│   ├── routes/                      # HTTP route definitions
+│   ├── routes/                            # HTTP route definitions
 │   │   ├── authRoutes.js
 │   │   ├── questionRoutes.js
 │   │   ├── examRoutes.js
@@ -326,19 +353,34 @@ cbt-backend/
 │   │   ├── userRoutes.js
 │   │   ├── activityRoutes.js
 │   │   ├── examResultRoutes.js
+│   │   ├── activityLogRoutes.js
 │   │   ├── schoolProfileRoutes.js
-│   │   └── analyticsRoutes.js
+│   │   ├── analyticsRoutes.js
+│   │   ├── taxonomyRoutes.js              # Dynamic taxonomy CRUD
+│   │   └── uploadRoutes.js                # Logo + question image upload
 │   │
-│   ├── services/                    # Business logic
-│   │   ├── activityLogService.js
-│   │   ├── autoFinishService.js     # Auto-finish expired sessions
-│   │   ├── autoExpireExamService.js # Auto-expire exam status
+│   ├── controllers/
+│   │   └── ... taxonomyController.js, uploadController.js included
+│   │
+│   ├── services/                          # Business logic
+│   │   ├── activityLogService.js          # createLog + logFromRequest wrapper
+│   │   ├── autoFinishService.js           # Auto-finish expired sessions
+│   │   ├── autoExpireExamService.js       # Auto-expire exam status
 │   │   ├── examService.js
+│   │   ├── examResultFormatter.js         # Shared EXAM_LIST_INCLUDE + formatter
 │   │   ├── scoreService.js
+│   │   ├── subjectAccessService.js
+│   │   ├── taxonomyCascadeService.js      # cascadeRename across snapshot tables
 │   │   ├── userService.js
 │   │   └── analyticsService.js
 │   │
-│   └── utils/                       # Helper utilities
+│   └── utils/                             # Helper utilities
+│       ├── asyncHandler.js                # asyncHandler + AppError + errorHandler
+│       └── response.js                    # ok / created / paginated helpers
+│
+├── uploads/                               # Multer-managed image storage (gitignored)
+│   ├── logos/
+│   └── questions/
 │
 └── tests/
     ├── setup.js
@@ -477,6 +519,10 @@ cbt-backend/
 | Role | `admin`, `teacher`, `student` |
 | ExamStatus | `SCHEDULED`, `ONGOING`, `ENDED` |
 | ExamParticipantStatus | `NOT_STARTED`, `IN_PROGRESS`, `COMPLETED`, `GRADED` |
+| Subject | `subject_id`, `name`, `color`, `sort_order`, `is_active` |
+| GradeLevel | `grade_level_id`, `value`, `label`, `sort_order`, `is_active` |
+| Major | `major_id`, `value`, `label`, `sort_order`, `is_active` |
+| SchoolProfile | Singleton (`id = 1`), `school_name`, `npsn`, `address`, `phone`, `email`, `logo_url`, `principal_name`, `school_level`, `accreditation` |
 | QuestionType | `SINGLE_CHOICE`, `MULTIPLE_CHOICE`, `ESSAY` |
 
 ## Global Deadline System
@@ -508,13 +554,20 @@ When a teacher creates an exam, they set `start_date` (when students can begin) 
 
 | Type | Description |
 |------|-------------|
-| `LOGIN` | User logged in |
-| `START_UJIAN` | Student started an exam |
-| `FINISH_UJIAN` | Student manually finished an exam |
-| `AUTO_FINISH_UJIAN` | Exam auto-finished (past end_date) |
-| `UJIAN_AUTO_EXPIRED` | Exam status changed to ENDED automatically |
-| `UJIAN_MANUAL_EXPIRED` | Exam status changed to ENDED manually |
+| `LOGIN`, `LOGOUT`, `CHANGE_PASSWORD` | Authentication events |
+| `START_EXAM`, `FINISH_EXAM`, `EXAM_VIOLATION` | Student exam lifecycle |
+| `AUTO_FINISH_UJIAN` | Exam auto-finished (past `end_date`) |
+| `UJIAN_AUTO_EXPIRED`, `UJIAN_MANUAL_EXPIRED` | Exam status forced to `ENDED` |
+| `CREATE_EXAM`, `UPDATE_EXAM`, `DELETE_EXAM` | Teacher exam CRUD |
 | `REASSIGN_STUDENTS` | Exam participants reassigned after category change |
+| `CREATE_QUESTION_BANK`, `UPDATE_QUESTION_BANK`, `DELETE_QUESTION_BANK` | Teacher bank CRUD |
+| `CREATE_QUESTION`, `UPDATE_QUESTION`, `DELETE_QUESTION` | Teacher question CRUD |
+| `CALCULATE_RESULT`, `UPDATE_MANUAL_SCORE` | Result computation + essay grading |
+| `BLOCK_STUDENT`, `UNBLOCK_STUDENT`, `GENERATE_UNLOCK` | Admin anti-cheat actions |
+| `BATCH_DELETE_USERS` | Admin bulk user deletion |
+| `UPDATE_SCHOOL_PROFILE` | Admin updated school identity |
+
+> The HTTP controllers create these via `activityLogService.logFromRequest(req, type, description, extras?)` — a thin wrapper that fills `user_id` / `ip_address` / `user_agent` from the request so callers stay focused on the event payload.
 
 ## API Documentation
 

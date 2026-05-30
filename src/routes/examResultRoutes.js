@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { verifyToken, checkRole } = require('../middlewares/validationMiddleware');
 const { resolveTeacher, resolveStudent } = require('../middlewares/resolveRole');
-const { getResultByParticipant, getResultByExam, getMyResults, calculateAndSaveResult, updateManualScore, getDetailedResult, getCompletedExams } = require('../controllers/examResultController');
+const { getResultByParticipant, getResultByExam, getMyResults, calculateAndSaveResult, updateManualScore, getDetailedResult, getCompletedExams, submitExam, getArchivedExams } = require('../controllers/examResultController');
 
 // Student routes - get their own results
 router.get('/my-results', verifyToken, checkRole('student'), resolveStudent, getMyResults);
@@ -14,5 +14,7 @@ router.get('/participant/:exam_participant_id', verifyToken, checkRole('teacher'
 router.get('/detail/:exam_participant_id', verifyToken, checkRole('teacher'), resolveTeacher, getDetailedResult);
 router.post('/calculate', verifyToken, checkRole('teacher'), resolveTeacher, calculateAndSaveResult);
 router.put('/manual-score', verifyToken, checkRole('teacher'), resolveTeacher, updateManualScore);
+router.post('/:examId/submit', verifyToken, checkRole('teacher'), resolveTeacher, submitExam);
+router.get('/archived-exams', verifyToken, checkRole('teacher'), resolveTeacher, getArchivedExams);
 
 module.exports = router;

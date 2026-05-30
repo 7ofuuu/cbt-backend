@@ -7,6 +7,7 @@ jest.mock('../../src/config/db');
 jest.mock('bcryptjs');
 jest.mock('../../src/services/activityLogService', () => ({
   createLog: jest.fn().mockResolvedValue(undefined),
+  logFromRequest: jest.fn().mockResolvedValue(undefined),
   getIpAddress: jest.fn().mockReturnValue('127.0.0.1'),
   getUserAgent: jest.fn().mockReturnValue('jest-test'),
 }));
@@ -261,7 +262,7 @@ describe('logout', () => {
     const { req, res, next } = makeReqRes({}, { id: 1, role: 'admin' });
     logout(req, res, next); await flush();
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: 'Logout berhasil' }));
-    expect(activityLogService.createLog).toHaveBeenCalled();
+    expect(activityLogService.logFromRequest).toHaveBeenCalled();
   });
 
   test('WB-17b: user not found in DB → still returns success (fallback username)', async () => {
