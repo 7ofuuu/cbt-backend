@@ -179,8 +179,57 @@ describe('Step 4: Student starts exam', () => {
       .send({ exam_id: 42 });
 
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('questions');
+    // Start now returns session state only — questions arrive via the
+    // encrypted /prefetch package, not here.
+    expect(res.body).toHaveProperty('exam_participant_id');
+    expect(res.body).not.toHaveProperty('questions');
     state.examParticipantId = res.body.exam_participant_id || 10;
+  });
+
+  test('BB-EF-04b: GET /api/students/exams/:examId/prefetch → 200, returns encrypted package', async () => {
+    prisma.user.findUnique.mockResolvedValue(studentDbUser);
+    prisma.student.findUnique.mockResolvedValue(mockStudent);
+
+    prisma.examParticipant.findFirst.mockResolvedValue({
+      exam_participant_id: 10,
+      is_blocked: false,
+      exam: {
+        exam_id: 42,
+        exam_name: 'Ujian Flow Test',
+        subject: 'Matematika',
+        duration_minutes: 90,
+        // Within the H-1 window so the password is generated and the package served.
+        start_date: new Date(Date.now() + 60 * 60 * 1000),
+        end_date: new Date('2099-12-31'),
+        access_password: null,
+        is_shuffle_questions: false,
+        exam_questions: [
+          {
+            exam_question_id: 1, question_id: 1, score_weight: 10, sequence: 1,
+            question: {
+              question_id: 1, question_text: 'Berapa 2+2?', question_type: 'SINGLE_CHOICE',
+              question_image: null,
+              answer_options: [
+                { option_id: 1, label: 'A', option_text: '4', is_correct: true },
+                { option_id: 2, label: 'B', option_text: '5', is_correct: false },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    prisma.exam.update.mockResolvedValue({ exam_id: 42, access_password: 'ABCD2345WX' });
+
+    const res = await request(app)
+      .get('/api/students/exams/42/prefetch')
+      .set('Authorization', `Bearer ${studentToken()}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveProperty('encrypted');
+    expect(res.body.data.encrypted).toHaveProperty('ciphertext');
+    // Answer keys must never reach the device — payload is encrypted, not plain.
+    expect(JSON.stringify(res.body.data)).not.toContain('is_correct');
   });
 
   test('BB-EF-05: start exam that not assigned → 404', async () => {

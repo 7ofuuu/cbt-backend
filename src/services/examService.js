@@ -5,6 +5,10 @@
 const prisma = require('../config/db');
 const { AppError } = require('../utils/asyncHandler');
 const { buildPagination, paginatedResponse } = require('./userService');
+const { generatePassword } = require('../utils/examCrypto');
+
+// Exam access password (for encrypted pre-download) becomes available H-1.
+const ACCESS_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Verify exam ownership by teacher.
@@ -156,6 +160,27 @@ const getQuestionsByBank = async (examId) => {
 };
 
 /**
+ * Ensure an exam has an access password, generating it lazily once the exam is
+ * within the H-1 window. Returns the password when available, or null when the
+ * exam is still earlier than H-1 (so callers can signal "not yet available").
+ * @param {{exam_id: number, start_date: Date|string, access_password: string|null}} exam
+ * @returns {Promise<string|null>}
+ */
+const ensureAccessPassword = async (exam) => {
+  const now = Date.now();
+  const start = new Date(exam.start_date).getTime();
+  if (now < start - ACCESS_WINDOW_MS) return null; // earlier than H-1
+  if (exam.access_password) return exam.access_password;
+
+  const password = generatePassword();
+  await prisma.exam.update({
+    where: { exam_id: exam.exam_id },
+    data: { access_password: password },
+  });
+  return password;
+};
+
+/**
  * Fisher-Yates shuffle algorithm for question randomization.
  * @param {Array} array
  * @returns {Array} shuffled copy
@@ -175,5 +200,6 @@ module.exports = {
   guardExamStatus,
   batchUpdateWeights,
   getQuestionsByBank,
+  ensureAccessPassword,
   shuffleArray,
 };
