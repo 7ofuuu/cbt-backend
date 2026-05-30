@@ -1,83 +1,69 @@
 # ngrok Forwarding + Firebase App Distribution
 
-Mengekspos **backend lokal (port 3000)** dan **dashboard (port 3001)** ke internet
-lewat ngrok — dibutuhkan agar APK Flutter yang didistribusi via Firebase App
-Distribution bisa menjangkau server dari HP manapun.
-
-Server lokal (`localhost:3000`, `localhost:3001`) **tetap hidup normal** saat ngrok
-berjalan. ngrok hanya membuka jalur internet tambahan, tidak menggantikan lokal.
+Tutorial self-host: **backend berjalan di laptop Anda (port 3000)** dan diekspos ke
+internet lewat ngrok, sehingga **dashboard (di Vercel)** dan **APK Flutter (Firebase
+App Distribution)** bisa menjangkaunya dari mana saja. Backend lokal (`localhost:3000`)
+tetap hidup normal saat ngrok berjalan — ngrok hanya membuka jalur internet tambahan.
 
 ---
 
-## 1. Setup satu kali (per anggota tim)
+## 1. Setup ngrok (sekali)
 
 ```powershell
 winget install ngrok.ngrok
 ngrok config add-authtoken <TOKEN_ANDA>   # dari https://dashboard.ngrok.com
 ```
 
-Masing-masing anggota tim perlu akun ngrok sendiri dan authtoken sendiri.
 Authtoken disimpan global di komputer (`%LOCALAPPDATA%\ngrok\ngrok.yml`) — **tidak
 disimpan di repo ini**.
 
 **Static domain:** Klaim 1 static domain gratis di <https://dashboard.ngrok.com/domains>,
-lalu isi di `ngrok.yml` (repo ini), `cbt-dashboard/.env` (`NEXT_PUBLIC_HOST_NGROK`),
-dan `cbt_app/lib/utils/url.dart` (`_ngrokHost`).
+lalu isikan ke `domain:` pada `ngrok.yml`. Static domain yang sama juga dipakai oleh:
+- env Vercel `NEXT_PUBLIC_HOST_NGROK` (frontend)
+- `cbt_app/lib/utils/url.dart` → `_ngrokHost` (mobile)
 
-## 2. Menjalankan setiap sesi
-
-```
-1. Jalankan backend dulu:    npm run dev
-2. Baru jalankan ngrok:
-```
+## 2. Menjalankan tiap sesi (di laptop Anda)
 
 ```powershell
-ngrok start --all --config "$env:LOCALAPPDATA\ngrok\ngrok.yml" --config ".\ngrok.yml"
+npm run dev      # 1) backend dulu di localhost:3000
+npm run ngrok    # 2) ekspos backend ke https://<static-domain>
 ```
 
-Atau jika pakai script root UAS:
+URL backend `https://<static-domain>` tetap sama selama memakai static domain. Biarkan
+keduanya berjalan selama sistem dipakai.
 
-```powershell
-.\scripts\start-ngrok.ps1
-```
+## 3. Bagaimana lokal + online jalan bersamaan
 
-ngrok menampilkan dua URL:
-- `https://<static-domain>` → backend (selalu sama)
-- `https://xxxx.ngrok-free.app` → dashboard (random per sesi, copy jika perlu)
-
-## 3. Bagaimana lokal + ngrok bisa jalan bersamaan
-
-| Client | Mode lokal | Mode ngrok |
-|--------|-----------|-----------|
-| **Dashboard** | Buka `localhost:3001` → Axios ke `localhost:3000` otomatis | Buka URL ngrok dashboard → Axios ke URL ngrok backend otomatis |
+| Client | Mode lokal (dev) | Mode online |
+|--------|------------------|-------------|
+| **Dashboard** | `localhost:3001` → Axios ke `localhost:3000` | di Vercel → Axios ke URL ngrok backend (`NEXT_PUBLIC_HOST_NGROK`) |
 | **Flutter** | `useNgrok=false` di `url.dart` | `useNgrok=true` di `url.dart` |
-| **Backend CORS** | Origins dari `CORS_ORIGINS` | `ALLOW_NGROK_ORIGINS=true` → izinkan `*.ngrok-free.app` |
+| **Backend CORS** | Origins dari `CORS_ORIGINS` | `ALLOW_NGROK_ORIGINS=true` + `ALLOW_VERCEL_ORIGINS=true` |
 
 Yang sudah ditangani di kode:
 - **Header `ngrok-skip-browser-warning`** — Axios kirim header ini agar XHR dapat JSON, bukan halaman HTML interstitial ngrok.
-- **CSP `connect-src`** di `next.config.mjs` — sudah menyertakan domain ngrok backend.
-- **`allowedDevOrigins`** — Next dev server mengizinkan request dari `*.ngrok-free.app`.
+- **CSP `connect-src`/`img-src`** di `next.config.mjs` — diturunkan dari `NEXT_PUBLIC_HOST_NGROK`, jadi pastikan env itu benar di Vercel.
 - **`trust proxy 1`** — backend baca IP asli client di balik proxy ngrok.
 
-> **Penting:** Set `ALLOW_NGROK_ORIGINS=false` di environment production.
+> **Penting:** matikan `ALLOW_NGROK_ORIGINS` di environment production yang sebenarnya.
 
-## 4. Env var yang perlu ditambahkan anggota tim
+## 4. Env var
 
-Setelah pull, copy dari `.env.example` dan isi sesuai domain masing-masing:
-
-**`cbt-backend/.env`** — tambahkan:
+**`cbt-backend/.env`** (laptop Anda):
 ```env
 ALLOW_NGROK_ORIGINS=true
+ALLOW_VERCEL_ORIGINS=true
 ```
 
-**`cbt-dashboard/.env`** — tambahkan:
+**Vercel → Project Settings → Environment Variables** (frontend):
 ```env
-NEXT_PUBLIC_HOST_NGROK=https://<static-domain-kamu>/api/
+NEXT_PUBLIC_HOST_NGROK=https://<static-domain>/api/
+NEXT_PUBLIC_HOST=https://<static-domain>/api/
 ```
 
-**`cbt_app/lib/utils/url.dart`** — ubah:
+**`cbt_app/lib/utils/url.dart`** (mobile):
 ```dart
-static const String _ngrokHost = "<static-domain-kamu>";
+static const String _ngrokHost = "<static-domain>";
 ```
 
 ---
