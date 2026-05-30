@@ -49,7 +49,7 @@ Authorization: Bearer <token>
 | Auth | 6 | No/Yes | All |
 | Questions | 11 | Yes | Teachers |
 | Exams | 13 | Yes | Teachers |
-| Student Exam | 5 | Yes (Student) | Students |
+| Student Exam | 6 | Yes (Student) | Students |
 | User Management | 15 | Yes (Admin/Teacher) | Admin/Teachers |
 | Activity Monitoring | 6 | Yes (Admin) | Admin |
 | Exam Results | 9 | Yes | Students/Teachers |
@@ -59,7 +59,7 @@ Authorization: Bearer <token>
 | Taxonomy | 10 | No/Yes (Admin) | All/Admin |
 | Upload | 2 | Yes (Admin/Teacher) | Admin/Teachers |
 | Misc | 1 | No | All |
-| **TOTAL** | **92** | — | — |
+| **TOTAL** | **93** | — | — |
 
 ---
 
@@ -658,9 +658,47 @@ Get exams assigned to the authenticated student (only `SCHEDULED` and `ONGOING` 
 
 ---
 
+### GET `/api/students/exams/:examId/prefetch`
+
+Download the **encrypted exam package** (the "sealed envelope") for offline-resilient start. Available from **H-1** (24 hours before `start_date`); before that it returns `403`. The package contains the questions **without answer keys** and is encrypted with a key derived from the per-exam access password — it stays opaque on the device until the student enters that password at start. This endpoint does **not** start the session.
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "exam": {
+      "exam_id": 1,
+      "exam_name": "UTS Matematika",
+      "subject": "Matematika",
+      "duration_minutes": 120,
+      "end_date": "2025-06-01T10:00:00.000Z"
+    },
+    "exam_participant_id": 1,
+    "total_questions": 10,
+    "encrypted": {
+      "v": 1,
+      "kdf": "pbkdf2-sha256",
+      "iterations": 210000,
+      "salt": "<base64>",
+      "iv": "<base64>",
+      "auth_tag": "<base64>",
+      "ciphertext": "<base64>"
+    }
+  }
+}
+```
+
+> Crypto: **PBKDF2-HMAC-SHA256** (210k iterations) → **AES-256-GCM**. Decrypted client-side; the plaintext payload is `{ "questions": [ … ] }` with `is_correct` omitted. The access password is generated lazily once the exam enters the H-1 window and is visible to admins only (see activity endpoints).
+
+**Error Responses:** `403` Package not yet available (earlier than H-1) · `400` No questions assigned / past `end_date` · `404` Not enrolled
+
+---
+
 ### POST `/api/students/exams/start`
 
-Start an exam. Sets status to `IN_PROGRESS` and returns the question list.
+Begin (or resume) an exam **session**. Sets status to `IN_PROGRESS` and records `start_time`. Returns session state **only** — the question list comes from the decrypted `prefetch` package, not from here.
 
 **Request Body:**
 
@@ -668,7 +706,7 @@ Start an exam. Sets status to `IN_PROGRESS` and returns the question list.
 { "exam_id": 1, "unlock_code": "A1B2C3" }
 ```
 
-> `unlock_code` is only required if the student is blocked.
+> `unlock_code` is only required if the student is blocked (anti-cheat). A valid code unblocks the participant. This is separate from the exam **access password** used to decrypt the package.
 
 **Response (200):**
 
@@ -684,30 +722,13 @@ Start an exam. Sets status to `IN_PROGRESS` and returns the question list.
   },
   "remaining_seconds": 7140,
   "total_questions": 10,
-  "questions": [
-    {
-      "exam_question_id": 1,
-      "sequence": 1,
-      "score_weight": 10,
-      "question": {
-        "question_id": 1,
-        "question_type": "SINGLE_CHOICE",
-        "question_text": "What is 2 + 2?",
-        "question_image": null,
-        "answer_options": [
-          { "option_id": 1, "label": "A", "option_text": "3" },
-          { "option_id": 2, "label": "B", "option_text": "4" }
-        ]
-      }
-    }
-  ],
   "existing_answers": [
     { "question_id": 1, "mc_option_ids": "2", "essay_answer_text": null }
   ]
 }
 ```
 
-> **Note:** `is_correct` is hidden from answer options. `existing_answers` contains previously saved answers (useful when resuming). `remaining_seconds` is the countdown to `min(start_time + duration_minutes, end_date)`.
+> **Note:** Questions are **no longer returned here** — fetch and decrypt them via `prefetch`. `existing_answers` contains previously saved answers (useful when resuming). `remaining_seconds` is the countdown to `min(start_time + duration_minutes, end_date)`.
 
 **Error Responses:** `403` Blocked (needs unlock code) · `400` Already finished / Not started yet / Past end_date
 
@@ -1066,6 +1087,8 @@ List all exams with participant status overview.
 Get participants for a specific exam.
 
 **Query Parameters:** `major`, `classroom`, `status` ("BLOCKED", "ON_PROGRESS", "SUBMITTED", or "all")
+
+The response `data.exam` object includes **`access_password`** — the per-exam password students enter to decrypt the pre-downloaded package. It is generated lazily once the exam enters the H-1 window (`null` before that) and is intended to be announced to students at start time. Admin-only.
 
 ---
 
