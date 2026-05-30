@@ -1,6 +1,67 @@
-# CBT Backend — API Documentation
+# CBT Backend — Complete API Documentation
 
-Complete API reference for the Computer-Based Test backend. **77 endpoints** across 10 route groups.
+**77 endpoints** covering authentication, question management, exam administration, student exam operations, user management, activity monitoring, results grading, and analytics.
+
+- **Backend Repo:** [cbt-backend](../cbt-backend/)  
+- **Backend README:** [Backend Setup Guide](../cbt-backend/README.md)
+- **Dashboard Repo:** [cbt-dashboard](../cbt-dashboard/)  
+- **Mobile App Repo:** [cbt_app](../cbt_app/)
+
+---
+
+## Quick Start
+
+### Base URL
+
+```
+http://localhost:3000/api
+```
+
+### Authentication
+
+All endpoints (except `/auth/login`, `/auth/register`, and `/school-profile`) require JWT token:
+
+```
+Authorization: Bearer <token>
+```
+
+**JWT Payload:** `{ id, role, is_super_admin }`  
+**Expiry:** 24 hours
+
+### Response Format
+
+**Success (2xx):**
+```json
+{ "message": "...", "data": {...}, ...other fields }
+```
+
+**Error (4xx/5xx):**
+```json
+{ "error": "Error description" }
+```
+
+---
+
+## Endpoint Overview
+
+| Group | Endpoints | Auth Required | Primary Users |
+|-------|-----------|---------------|---------------|
+| Auth | 6 | No/Yes | All |
+| Questions | 11 | Yes | Teachers |
+| Exams | 13 | Yes | Teachers |
+| Student Exam | 5 | Yes (Student) | Students |
+| User Management | 15 | Yes (Admin/Teacher) | Admin/Teachers |
+| Activity Monitoring | 6 | Yes (Admin) | Admin |
+| Exam Results | 9 | Yes | Students/Teachers |
+| Activity Logs | 5 | Yes | Admin/Teachers |
+| School Profile | 2 | No/Yes (Admin) | All/Admin |
+| Analytics | 4 | Yes (Teacher) | Teachers |
+| Taxonomy | 10 | No/Yes (Admin) | All/Admin |
+| Upload | 2 | Yes (Admin/Teacher) | Admin/Teachers |
+| Misc | 1 | No | All |
+| **TOTAL** | **92** | — | — |
+
+---
 
 ## Base URL
 
@@ -1269,6 +1330,41 @@ Update manual score for an essay answer. **Automatically recalculates** `final_s
 
 ---
 
+### POST `/api/exam-results/:examId/submit` — Teacher
+
+Submit a completed exam to the archive. Used by the teacher Hasil Ujian page once grading is finalised — archived exams move from the **Aktif** tab to the **Arsip** tab.
+
+**Middleware:** `verifyToken`, `checkRole('teacher')`, `resolveTeacher`
+
+**Preconditions:**
+- Exam must be in `ENDED` status (auto-set by the expiry scheduler once `end_date` passes)
+- Exam must not already be archived (`teacher_submitted_at` must be null)
+
+**Response (200):**
+
+```json
+{ "success": true, "message": "Ujian berhasil disubmit dan dipindahkan ke arsip" }
+```
+
+**Errors:**
+- `400` — exam not yet `ENDED` or already archived
+- `403` — teacher cannot access this subject
+
+Internally sets `Exam.teacher_submitted_at = now()`, which excludes the exam from `GET /completed-exams` and includes it in `GET /archived-exams`.
+
+---
+
+### GET `/api/exam-results/archived-exams` — Teacher
+
+List archived exams (those submitted via the endpoint above). Mirrors `GET /completed-exams` but filters on `teacher_submitted_at IS NOT NULL` and orders by archive timestamp descending.
+
+**Query Parameters:**
+- `page`, `limit` (optional, defaults `1` / `10`)
+
+**Response (200):** Same paginated shape as `completed-exams`, with each row additionally carrying `teacher_submitted_at`. The statistics and participant breakdown payload come from the shared `formatExamForList` helper, so the two endpoints stay in sync.
+
+---
+
 ## 8. Activity Logs (`/api/activity-logs`) — Admin & Teacher
 
 All routes require `verifyToken` + `checkRole(['admin', 'teacher'])`.
@@ -1460,6 +1556,177 @@ Get cross-subject audit overview for coordinator only.
 
 ---
 
+## 11. Taxonomy (`/api/taxonomy`)
+
+Manages dynamic master data: **subjects**, **grade levels**, and **majors**. The dashboard `master-data` page writes here; dropdowns across dashboard and Flutter read from the public `GET` endpoint instead of hardcoded constants, so admin edits propagate without a redeploy.
+
+Deletes are **soft** (`is_active = false`). Historical exam/student/teacher rows carry the value as a string snapshot and keep working even after a taxonomy entry is deactivated.
+
+### GET `/api/taxonomy`
+
+Combined fetch of all three taxonomies in one call. **Public** — no auth required.
+
+**Query Parameters:**
+- `include_inactive` (optional) — set to `true` to receive soft-deleted rows (used by the master-data UI)
+
+**Response (200):**
+
+```json
+{
+  "subjects": [
+    { "subject_id": 1, "name": "Matematika", "color": "#3b82f6", "sort_order": 0, "is_active": true }
+  ],
+  "grade_levels": [
+    { "grade_level_id": 1, "value": "X", "label": "Kelas 10", "sort_order": 0, "is_active": true }
+  ],
+  "majors": [
+    { "major_id": 1, "value": "IPA", "label": "IPA", "sort_order": 0, "is_active": true }
+  ]
+}
+```
+
+---
+
+### POST `/api/taxonomy/subjects` — Admin
+
+**Request Body:**
+
+```json
+{ "name": "Bahasa Mandarin", "color": "#ec4899", "sort_order": 14 }
+```
+
+`color` accepts a HEX (`#rrggbb`) preferred, or a legacy Tailwind palette name for backward compat. Stored verbatim and resolved by the dashboard `useSubjectTheme` hook.
+
+---
+
+### PUT `/api/taxonomy/subjects/:id` — Admin
+
+Supports an opt-in `cascade_rename: true` flag that rewrites the subject string snapshot wherever it appears on historical `Exam`, `QuestionBank`, `Question`, and `Teacher` rows. Returns a `cascade` summary so the dashboard can surface the affected count in a toast.
+
+**Request Body:**
+
+```json
+{ "name": "Matematika Wajib", "color": "#3b82f6", "cascade_rename": true }
+```
+
+**Response (200):**
+
+```json
+{
+  "subject": { "subject_id": 1, "name": "Matematika Wajib", "...": "..." },
+  "cascade": { "exams": 4, "question_banks": 6, "questions": 120, "teachers": 1 }
+}
+```
+
+When `cascade_rename` is omitted or `false`, `cascade` is `null` and only future dropdowns reflect the rename.
+
+---
+
+### DELETE `/api/taxonomy/subjects/:id` — Admin
+
+Soft-deactivate (sets `is_active = false`).
+
+---
+
+### POST `/api/taxonomy/grade-levels` — Admin
+
+```json
+{ "value": "XIII", "label": "Kelas 13", "sort_order": 3 }
+```
+
+`value` is the snapshot stored on dependent rows; `label` is for display. Mirrors the Subject cascade behaviour on PUT.
+
+---
+
+### PUT `/api/taxonomy/grade-levels/:id` — Admin
+
+Cascade targets when `cascade_rename: true`: `Exam`, `QuestionBank`, `Question`, `Student`.
+
+---
+
+### DELETE `/api/taxonomy/grade-levels/:id` — Admin
+
+Soft-deactivate.
+
+---
+
+### POST `/api/taxonomy/majors` — Admin
+
+```json
+{ "value": "MIPA", "label": "MIPA", "sort_order": 0 }
+```
+
+---
+
+### PUT `/api/taxonomy/majors/:id` — Admin
+
+Cascade targets when `cascade_rename: true`: `Exam`, `QuestionBank`, `Question`, `Student`.
+
+---
+
+### DELETE `/api/taxonomy/majors/:id` — Admin
+
+Soft-deactivate.
+
+---
+
+## 12. Upload (`/api/upload`)
+
+Image upload pipeline backed by `multer` disk storage. Files land under `cbt-backend/uploads/<bucket>/` with a timestamp + random filename so collisions are impossible. The server serves these back as static files under `/uploads/...` with `Cross-Origin-Resource-Policy: cross-origin` so the dashboard (different port) can fetch them.
+
+**Limits:**
+- Max size: **5 MB** per file
+- Allowed MIME: `image/png`, `image/jpeg`, `image/webp`, `image/gif`
+
+### POST `/api/upload/logo` — Admin
+
+Upload the school logo. Mounted before the school-profile PUT so the admin can upload, copy the returned URL into `logo_url`, and save.
+
+**Headers:** `Content-Type: multipart/form-data`
+
+**Form field:** `file` — the image binary
+
+**Response (201):**
+
+```json
+{
+  "url": "/uploads/logos/1780046533418-tcot3epi.png",
+  "filename": "1780046533418-tcot3epi.png",
+  "size": 24576,
+  "mimetype": "image/png"
+}
+```
+
+The returned `url` is **path-relative** (no host) so it stays correct on localhost, ngrok, and production. Clients prepend the API origin themselves when rendering (the dashboard `resolvePreviewUrl` helper and Flutter `Env.resolveAssetUrl` do this).
+
+---
+
+### POST `/api/upload/question-image` — Teacher or Admin
+
+Upload an attachment for a question. Used by the teacher question authoring page; the returned URL is saved on `Question.question_image`.
+
+Same request/response shape as logo upload, but files land under `/uploads/questions/`.
+
+**Error responses:**
+- `400` — wrong MIME type (`Format file tidak didukung`)
+- `400` — over 5 MB (multer `LIMIT_FILE_SIZE`)
+
+---
+
+## 13. Misc
+
+### GET `/api/time`
+
+Returns trusted server time. Used by the Flutter app and dashboard to validate exam start/end windows and detect device clock tampering. No auth, no rate limit.
+
+**Response (200):**
+
+```json
+{ "now": "2025-12-30T14:32:11.408Z" }
+```
+
+---
+
 ## Global Deadline System
 
 Exam timing uses a **dual timer system**:
@@ -1506,7 +1773,7 @@ All errors follow:
 
 ---
 
-## Endpoint Summary (77 total)
+## Endpoint Summary (92 total)
 
 | # | Method | Route | Auth |
 |---|--------|-------|------|
@@ -1587,3 +1854,225 @@ All errors follow:
 | 75 | GET | `/api/analytics/dashboard-summary` | teacher |
 | 76 | GET | `/api/analytics/teacher-performance` | teacher |
 | 77 | GET | `/api/analytics/coordinator-audit` | teacher (coordinator) |
+| 78 | POST | `/api/exam-results/:examId/submit` | teacher |
+| 79 | GET | `/api/exam-results/archived-exams` | teacher |
+| 80 | GET | `/api/taxonomy` | — |
+| 81 | POST | `/api/taxonomy/subjects` | admin |
+| 82 | PUT | `/api/taxonomy/subjects/:id` | admin |
+| 83 | DELETE | `/api/taxonomy/subjects/:id` | admin |
+| 84 | POST | `/api/taxonomy/grade-levels` | admin |
+| 85 | PUT | `/api/taxonomy/grade-levels/:id` | admin |
+| 86 | DELETE | `/api/taxonomy/grade-levels/:id` | admin |
+| 87 | POST | `/api/taxonomy/majors` | admin |
+| 88 | PUT | `/api/taxonomy/majors/:id` | admin |
+| 89 | DELETE | `/api/taxonomy/majors/:id` | admin |
+| 90 | POST | `/api/upload/logo` | admin |
+| 91 | POST | `/api/upload/question-image` | admin/teacher |
+| 92 | GET | `/api/time` | — |
+
+
+---
+
+## Common Workflows
+
+### 1. Admin Setup Flow
+
+1. **Login** (POST `/api/auth/login`)
+2. **Create Teachers** (POST `/api/users/` or POST `/api/users/batch`)
+3. **Create Students** (POST `/api/users/` or POST `/api/users/batch`)
+4. **Monitor Activity** (GET `/api/admin/activities/`)
+5. **Block/Unblock** (POST `/api/admin/activities/{id}/block`, generate unlock code)
+
+### 2. Teacher Exam Creation Flow
+
+1. **Login** (POST `/api/auth/login` as teacher)
+2. **Create Question Bank** (POST `/api/questions/bank`)
+3. **Add Questions to Bank** (POST `/api/questions/` x N)
+4. **Create Exam** (POST `/api/exams/`)
+5. **Assign Questions** (POST `/api/exams/assign-bank` or POST `/api/exams/assign-question`)
+6. **Assign Students** (POST `/api/exams/assign-student` — auto-happens on creation)
+7. **Grade Essays** (POST `/api/users/score`)
+8. **Finalize Scores** (POST `/api/users/finalize`)
+
+### 3. Student Exam Taking Flow
+
+1. **Login** (POST `/api/auth/login` as student)
+2. **View Exams** (GET `/api/students/exams`)
+3. **Start Exam** (POST `/api/students/exams/start`)
+4. **Submit Answers** (POST `/api/students/exams/answer` x N)
+5. **Finish Exam** (POST `/api/students/exams/finish`)
+6. **View Results** (GET `/api/exam-results/my-results`)
+
+### 4. Teacher Results Review Flow
+
+1. **Login** (POST `/api/auth/login` as teacher)
+2. **View Completed Exams** (GET `/api/exam-results/completed-exams`)
+3. **View Participant Results** (GET `/api/exam-results/exam/:exam_id`)
+4. **Grade Essays** (POST `/api/users/score`)
+5. **Finalize Scores** (POST `/api/users/finalize`)
+6. **View Detailed Review** (GET `/api/exam-results/detail/:exam_participant_id`)
+
+---
+
+## Timing & Deadlines
+
+### Dual Timer System
+
+Each exam has **two time limits**:
+
+1. **Global Deadline** (`exam.end_date`)
+   - Hard cutoff for ALL participants
+   - No exceptions — all must finish by this time
+   - Server auto-finishes at deadline
+
+2. **Per-Student Duration** (`exam.duration_minutes`)
+   - Individual countdown starting when student begins
+   - Student effective deadline = `min(start_time + duration_minutes, end_date)`
+
+### Scheduler Behavior
+
+**Auto-Finish Scheduler** (runs every 60 seconds):
+- Checks all `IN_PROGRESS` participants
+- If `current_time > exam.end_date` → auto-finishes exam
+- Auto-grades MC questions using answer keys
+- Sets status to `COMPLETED` (has essay) or `GRADED` (all MC/graded)
+- Logs `AUTO_FINISH_UJIAN` activity
+
+**Auto-Expire Scheduler** (runs every 60 seconds):
+- Checks all exams with `SCHEDULED` or `ONGOING` status
+- If `current_time > exam.end_date` → changes status to `ENDED`
+- Logs `UJIAN_AUTO_EXPIRED` activity
+
+---
+
+## Troubleshooting
+
+### Common Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `401 Unauthorized` | Missing/invalid JWT token | Verify token in `Authorization` header, ensure not expired |
+| `403 Forbidden` | Wrong role or insufficient permissions | Check user role and endpoint access level |
+| `409 Conflict` | Duplicate username or question bank name | Ensure unique identifiers, check existing data |
+| `400 Bad Request` | Invalid/missing request body fields | Review endpoint documentation, validate payload |
+| `404 Not Found` | Resource doesn't exist | Verify ID exists and is correct |
+| `500 Internal Server Error` | Server crash or unexpected error | Check server logs, restart backend if needed |
+
+### Student Blocked / Anti-Cheat
+
+**Issue:** Student sees "Exam Blocked" page
+
+**Why:** App was backgrounded (not visible) for >10 seconds during exam
+
+**Solution:**
+1. Admin generates unlock code: POST `/api/admin/activities/{id}/generate-unlock`
+2. Student provides code: POST `/api/students/exams/start` with `unlock_code` parameter
+3. Exam resumes if code is valid
+
+### Exam Not Showing Up
+
+**Issue:** Student doesn't see exam in exam list
+
+**Possible causes:**
+- Exam status is not `SCHEDULED` or `ONGOING`
+- Student's `grade_level` + `major` don't match exam criteria
+- Student hasn't been assigned to exam
+
+**Solution:**
+1. Teacher: Verify exam status (POST `/api/exams/` creates as `SCHEDULED`)
+2. Teacher: Verify student was assigned (check GET `/api/exams/:id` participants list)
+3. Teacher: Manually assign if needed (POST `/api/exams/assign-student`)
+
+### Answers Not Saving
+
+**Issue:** Student submits answer but it doesn't persist
+
+**Possible causes:**
+- Network connection lost
+- Invalid `exam_participant_id`
+- Server timeout
+
+**Solution:**
+1. Check network connectivity
+2. Retry submission via frontend retry logic
+3. Verify participant ID is correct (from `/api/students/exams/start`)
+
+### Scores Not Calculating
+
+**Issue:** Results show 0 score or incorrect totals
+
+**Possible causes:**
+- Essays not graded yet (status is `COMPLETED`, not `GRADED`)
+- Manual scores not saved (POST `/api/users/score` not called)
+- Finalize not called (POST `/api/users/finalize` not called)
+
+**Solution:**
+1. Grade all essay answers (POST `/api/users/score`)
+2. Call finalize endpoint (POST `/api/users/finalize`)
+3. Verify in GET `/api/exam-results/detail/:exam_participant_id`
+
+---
+
+## Best Practices
+
+### For Clients (Dashboard/Mobile App)
+
+1. **Token Management**
+   - Store JWT securely (HTTP-only cookies for web, SharedPreferences for mobile)
+   - Auto-attach to all requests
+   - Handle 401 → redirect to login
+
+2. **Error Handling**
+   - Always check `error?.response?.data?.error` for backend message
+   - Show user-friendly error dialogs
+   - Log errors for debugging
+
+3. **Pagination**
+   - Use `page` and `limit` query params
+   - Cache results locally if possible
+   - Show loading indicator while fetching
+
+4. **Auto-Save (Mobile App)**
+   - Submit answer immediately on selection
+   - Handle network failures gracefully
+   - Queue offline answers if needed
+
+### For Developers
+
+1. **Testing Endpoints**
+   - Use Postman/Thunder Client with JWT tokens
+   - Test with multiple roles (admin, teacher, student)
+   - Verify ownership checks (e.g., teacher can't access other's questions)
+
+2. **Data Validation**
+   - Always validate required fields
+   - Check min/max lengths (e.g., password policy)
+   - Use consistent date formats (ISO 8601)
+
+3. **Performance**
+   - Use pagination to avoid huge responses
+   - Index frequently-queried fields (user_id, exam_id, etc.)
+   - Cache school profile and constants
+
+4. **Security**
+   - Never expose `is_correct` in answer options during exam
+   - Verify Super Admin protections (can't delete/downgrade)
+   - Use HTTPS in production
+   - Rotate JWT secrets periodically
+
+---
+
+## Support & Resources
+
+- **Backend Repository:** [cbt-backend/](../cbt-backend/)
+- **Backend README:** [Setup & Configuration](../cbt-backend/README.md)
+- **Dashboard Setup:** [cbt-dashboard/README.md](../cbt-dashboard/README.md)
+- **Mobile App Setup:** [cbt_app/README.md](../cbt_app/README.md)
+- **Database Schema:** [prisma/schema.prisma](../cbt-backend/prisma/schema.prisma)
+- **Seed Data:** [prisma/seed.js](../cbt-backend/prisma/seed.js)
+
+---
+
+**Last Updated:** May 2026  
+**API Version:** 1.0  
+**Total Endpoints:** 77

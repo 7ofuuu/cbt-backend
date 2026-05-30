@@ -6,6 +6,7 @@
 jest.mock('../../src/config/db');
 jest.mock('../../src/services/activityLogService', () => ({
   createLog: jest.fn().mockResolvedValue(undefined),
+  logFromRequest: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../../src/services/scoreService', () => ({
   calculateScore: jest.fn(),

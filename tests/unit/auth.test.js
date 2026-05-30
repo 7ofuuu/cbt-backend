@@ -7,6 +7,7 @@ jest.mock('../../src/config/db');
 jest.mock('bcryptjs');
 jest.mock('../../src/services/activityLogService', () => ({
   createLog: jest.fn().mockResolvedValue(undefined),
+  logFromRequest: jest.fn().mockResolvedValue(undefined),
   getIpAddress: jest.fn().mockReturnValue('127.0.0.1'),
   getUserAgent: jest.fn().mockReturnValue('jest-test'),
 }));
@@ -235,11 +236,13 @@ describe('changePassword', () => {
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
   });
 
-  test('WB-15: wrong current password → AppError 401', async () => {
+  test('WB-15: wrong current password → AppError 400', async () => {
+    // 400, not 401: the session is valid, only the supplied password is wrong.
+    // A 401 would trip the dashboard global session-expired handler and log the user out.
     bcrypt.compare.mockResolvedValue(false);
     const { req, res, next } = makeReqRes({ current_password: 'WrongOld1', new_password: 'NewPass1' }, { id: 1, role: 'admin' });
     changePassword(req, res, next); await flush();
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
   });
 
   test('WB-16: valid change → 200 success message', async () => {
@@ -259,7 +262,7 @@ describe('logout', () => {
     const { req, res, next } = makeReqRes({}, { id: 1, role: 'admin' });
     logout(req, res, next); await flush();
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: 'Logout berhasil' }));
-    expect(activityLogService.createLog).toHaveBeenCalled();
+    expect(activityLogService.logFromRequest).toHaveBeenCalled();
   });
 
   test('WB-17b: user not found in DB → still returns success (fallback username)', async () => {

@@ -18,6 +18,9 @@ async function main() {
 
   // Clear existing data
   console.log('🗑️  Clearing existing data...');
+  await prisma.subject.deleteMany();
+  await prisma.gradeLevel.deleteMany();
+  await prisma.major.deleteMany();
   await prisma.schoolProfile.deleteMany();
   await prisma.activityLog.deleteMany();
   await prisma.examResult.deleteMany();
@@ -55,6 +58,47 @@ async function main() {
     },
   });
   console.log('✅ School profile created\n');
+
+  // ==================== TAXONOMY (master data) ====================
+  console.log('📚 Seeding taxonomy (subjects, grade levels, majors)...');
+  const SUBJECTS = [
+    { name: 'Matematika', color: 'blue' },
+    { name: 'Bahasa Indonesia', color: 'green' },
+    { name: 'Bahasa Inggris', color: 'pink' },
+    { name: 'Fisika', color: 'sky' },
+    { name: 'Kimia', color: 'fuchsia' },
+    { name: 'Biologi', color: 'emerald' },
+    { name: 'Sejarah', color: 'amber' },
+    { name: 'Geografi', color: 'lime' },
+    { name: 'Ekonomi', color: 'orange' },
+    { name: 'Sosiologi', color: 'rose' },
+    { name: 'PKN', color: 'red' },
+    { name: 'Seni Budaya', color: 'violet' },
+    { name: 'Penjaskes', color: 'teal' },
+    { name: 'TIK', color: 'indigo' },
+  ];
+  for (let i = 0; i < SUBJECTS.length; i++) {
+    await prisma.subject.create({ data: { ...SUBJECTS[i], sort_order: i } });
+  }
+
+  const GRADE_LEVELS = [
+    { value: 'X', label: 'Kelas 10' },
+    { value: 'XI', label: 'Kelas 11' },
+    { value: 'XII', label: 'Kelas 12' },
+  ];
+  for (let i = 0; i < GRADE_LEVELS.length; i++) {
+    await prisma.gradeLevel.create({ data: { ...GRADE_LEVELS[i], sort_order: i } });
+  }
+
+  const MAJORS = [
+    { value: 'IPA', label: 'IPA' },
+    { value: 'IPS', label: 'IPS' },
+    { value: 'Bahasa', label: 'Bahasa' },
+  ];
+  for (let i = 0; i < MAJORS.length; i++) {
+    await prisma.major.create({ data: { ...MAJORS[i], sort_order: i } });
+  }
+  console.log(`✅ Seeded ${SUBJECTS.length} subjects, ${GRADE_LEVELS.length} grade levels, ${MAJORS.length} majors\n`);
 
   const hashedPassword = await bcrypt.hash('password123', 10);
 

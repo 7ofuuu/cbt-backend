@@ -46,12 +46,9 @@ const createQuestionBank = asyncHandler(async (req, res) => {
     },
   });
 
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'CREATE_QUESTION_BANK',
-    description: `${teacher.full_name} membuat bank soal "${bank_name}"`,
-    metadata: { question_bank_id: bank.question_bank_id, bank_name, created_by: teacher.teacher_id },
-  });
+  await activityLogService.logFromRequest(req, 'CREATE_QUESTION_BANK',
+    `${teacher.full_name} membuat bank soal "${bank_name}"`,
+    { metadata: { question_bank_id: bank.question_bank_id, bank_name, created_by: teacher.teacher_id } });
 
   res.status(201).json({ message: 'Bank soal berhasil dibuat', question_bank: bank });
 });
@@ -96,12 +93,9 @@ const updateQuestionBank = asyncHandler(async (req, res) => {
     },
   });
 
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'UPDATE_QUESTION_BANK',
-    description: `${teacher.full_name} memperbarui bank soal "${updated.bank_name}"`,
-    metadata: { question_bank_id: parseInt(id), bank_name: updated.bank_name, updated_by: teacher.teacher_id },
-  });
+  await activityLogService.logFromRequest(req, 'UPDATE_QUESTION_BANK',
+    `${teacher.full_name} memperbarui bank soal "${updated.bank_name}"`,
+    { metadata: { question_bank_id: parseInt(id), bank_name: updated.bank_name, updated_by: teacher.teacher_id } });
 
   res.json({ message: 'Bank soal berhasil diperbarui', question_bank: updated });
 });
@@ -137,12 +131,9 @@ const deleteQuestionBank = asyncHandler(async (req, res) => {
     await tx.questionBank.delete({ where: { question_bank_id: parseInt(id) } });
   });
 
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'DELETE_QUESTION_BANK',
-    description: `${teacher.full_name} menghapus bank soal "${bank.bank_name}" (${bank._count.questions} soal)`,
-    metadata: { question_bank_id: parseInt(id), bank_name: bank.bank_name, deleted_by: teacher.teacher_id },
-  });
+  await activityLogService.logFromRequest(req, 'DELETE_QUESTION_BANK',
+    `${teacher.full_name} menghapus bank soal "${bank.bank_name}" (${bank._count.questions} soal)`,
+    { metadata: { question_bank_id: parseInt(id), bank_name: bank.bank_name, deleted_by: teacher.teacher_id } });
 
   res.json({
     message: `Bank soal "${bank.bank_name}" beserta ${bank._count.questions} soal berhasil dihapus`,
@@ -234,12 +225,9 @@ const createQuestion = asyncHandler(async (req, res) => {
     return question;
   });
 
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'CREATE_QUESTION',
-    description: `${teacher.full_name} membuat soal #${result.question_id} di bank soal #${question_bank_id}`,
-    metadata: { question_id: result.question_id, question_bank_id: parseInt(question_bank_id), created_by: teacher.teacher_id },
-  });
+  await activityLogService.logFromRequest(req, 'CREATE_QUESTION',
+    `${teacher.full_name} membuat soal #${result.question_id} di bank soal #${question_bank_id}`,
+    { metadata: { question_id: result.question_id, question_bank_id: parseInt(question_bank_id), created_by: teacher.teacher_id } });
 
   res.status(201).json({ message: 'Soal berhasil dibuat', question_id: result.question_id });
 });
@@ -393,12 +381,9 @@ const updateQuestion = asyncHandler(async (req, res) => {
     return updated;
   });
 
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'UPDATE_QUESTION',
-    description: `${teacher.full_name} memperbarui soal #${id}`,
-    metadata: { question_id: parseInt(id), updated_by: teacher.teacher_id },
-  });
+  await activityLogService.logFromRequest(req, 'UPDATE_QUESTION',
+    `${teacher.full_name} memperbarui soal #${id}`,
+    { metadata: { question_id: parseInt(id), updated_by: teacher.teacher_id } });
 
   res.json({ message: 'Soal berhasil diupdate', question: result });
 });
@@ -427,12 +412,9 @@ const deleteQuestion = asyncHandler(async (req, res) => {
 
   await prisma.question.delete({ where: { question_id: parseInt(id) } });
 
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'DELETE_QUESTION',
-    description: `${teacher.full_name} menghapus soal #${id}`,
-    metadata: { question_id: parseInt(id), deleted_by: teacher.teacher_id },
-  });
+  await activityLogService.logFromRequest(req, 'DELETE_QUESTION',
+    `${teacher.full_name} menghapus soal #${id}`,
+    { metadata: { question_id: parseInt(id), deleted_by: teacher.teacher_id } });
 
   res.json({ message: 'Soal berhasil dihapus' });
 });
