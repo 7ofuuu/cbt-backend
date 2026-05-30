@@ -173,58 +173,60 @@ npx prisma db seed
 
 ---
 
-## Model Hosting Tim
+## Self-Hosting (Backend di laptop + Frontend di Vercel)
 
-Untuk demo / distribusi APK, **hanya satu orang (host) yang perlu menjalankan server**.
-Anggota tim lainnya tetap bisa mengembangkan dan push ke repo tanpa perlu menjalankan
-backend sendiri.
+Setup yang dipakai saat ini: **backend berjalan di laptop Anda** dan diekspos ke
+internet lewat **ngrok**, sementara **frontend (dashboard) di-host di Vercel** dan
+memanggil backend Anda melalui URL ngrok. Selama demo/ujian berlangsung, laptop Anda
+harus tetap menyala dan menjalankan backend + ngrok.
 
-| Peran | Yang dilakukan |
-|-------|----------------|
-| **Host** (yang punya ngrok + komputer server) | Jalankan `npm run dev` + `npm run ngrok`. Backend & dashboard bisa diakses oleh semua orang via URL ngrok. |
-| **Anggota tim lain** | Push kode ke repo seperti biasa. Kalau ingin test, hubungi host untuk minta URL ngrok dashboard atau gunakan APK yang sudah didistribusi. |
-| **Tester / stakeholder** | Install APK dari Firebase App Distribution, langsung bisa pakai tanpa setup. |
+```
+[Dashboard @ Vercel] ──HTTPS──┐
+                              ├──► [ngrok static domain] ──► [backend @ laptop Anda :3000]
+[APK Flutter @ HP]   ──HTTPS──┘
+```
 
-> Host tidak perlu melakukan apapun khusus tiap ada update kode dari tim —
-> cukup `git pull` dan restart `npm run dev`. Semua orang otomatis dapat versi terbaru
-> karena mengakses server yang sama via ngrok.
-
----
-
-## ngrok (Internet Access / Firebase App Distribution)
-
-Gunakan ngrok untuk mengekspos backend ke internet — dibutuhkan saat APK Flutter
-didistribusikan via Firebase App Distribution dan harus menjangkau server lokal.
-Server lokal tetap jalan normal; ngrok hanya membuka jalur tambahan dari internet.
-
-**Setup satu kali:**
+### 1. Setup ngrok (sekali)
 
 ```powershell
 winget install ngrok.ngrok
 ngrok config add-authtoken <TOKEN>   # dari https://dashboard.ngrok.com
 ```
 
-**Jalankan (setelah `npm run dev` sudah jalan):**
+Klaim 1 **static domain** gratis di <https://dashboard.ngrok.com/domains>, lalu isikan
+ke `domain:` pada `ngrok.yml`. Static domain membuat URL backend tetap sama tiap sesi,
+jadi frontend dan APK tidak perlu dikonfigurasi ulang.
+
+### 2. Jalankan tiap sesi (di laptop Anda)
 
 ```bash
-npm run ngrok
+npm run dev      # backend di http://localhost:3000
+npm run ngrok    # ekspos backend ke https://<static-domain>
 ```
 
-`ngrok.yml` di root repo ini berisi konfigurasi dua tunnel (backend:3000 + dashboard:3001).
-Ganti `domain:` di `ngrok.yml` dengan static domain Anda dari dashboard ngrok.
+Biarkan keduanya berjalan selama sistem dipakai. Backend `.env`:
 
-**Env var terkait:**
-- `ALLOW_NGROK_ORIGINS=true` — izinkan CORS dari `*.ngrok-free.app` (dev only, sudah ada di `.env`)
-- `ALLOW_VERCEL_ORIGINS=true` — izinkan CORS dari `*.vercel.app` (dipakai saat dashboard di-host di Vercel)
+```env
+ALLOW_NGROK_ORIGINS=true    # izinkan CORS dari *.ngrok-free.app
+ALLOW_VERCEL_ORIGINS=true   # izinkan CORS dari *.vercel.app (frontend Vercel)
+```
 
-Panduan lengkap + Firebase App Distribution: lihat `NGROK-FIREBASE-SETUP.md` di root repo.
+### 3. Arahkan frontend (Vercel) ke backend Anda
 
-### Dashboard di-host di Vercel
+Di **Project Settings → Environment Variables** Vercel, set ke URL ngrok Anda:
 
-Dashboard bisa di-deploy ke Vercel sementara backend tetap lokal + diekspos via ngrok.
-Frontend Vercel memanggil backend lewat URL ngrok static domain, jadi host wajib
-menjalankan `npm run dev` + `npm run ngrok`. Set `ALLOW_VERCEL_ORIGINS=true` di `.env`.
-Panduan langkah deploy ada di `cbt-dashboard/VERCEL-DEPLOY.md`.
+```env
+NEXT_PUBLIC_HOST_NGROK=https://<static-domain>/api/
+NEXT_PUBLIC_HOST=https://<static-domain>/api/
+```
+
+Dashboard otomatis memilih URL ngrok ini saat diakses dari domain Vercel. Setiap ganti
+static domain, perbarui env ini lalu redeploy.
+
+### 4. Arahkan aplikasi mobile ke backend Anda
+
+Set static domain di `cbt_app/lib/utils/url.dart` (`_ngrokHost`) dan `useNgrok = true`
+saat build APK. Distribusi APK via Firebase App Distribution: lihat `NGROK-FIREBASE-SETUP.md`.
 
 ---
 
