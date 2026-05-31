@@ -18,6 +18,9 @@ async function main() {
 
   // Clear existing data
   console.log('🗑️  Clearing existing data...');
+  await prisma.subject.deleteMany();
+  await prisma.gradeLevel.deleteMany();
+  await prisma.major.deleteMany();
   await prisma.schoolProfile.deleteMany();
   await prisma.activityLog.deleteMany();
   await prisma.examResult.deleteMany();
@@ -55,6 +58,47 @@ async function main() {
     },
   });
   console.log('✅ School profile created\n');
+
+  // ==================== TAXONOMY (master data) ====================
+  console.log('📚 Seeding taxonomy (subjects, grade levels, majors)...');
+  const SUBJECTS = [
+    { name: 'Matematika', color: 'blue' },
+    { name: 'Bahasa Indonesia', color: 'green' },
+    { name: 'Bahasa Inggris', color: 'pink' },
+    { name: 'Fisika', color: 'sky' },
+    { name: 'Kimia', color: 'fuchsia' },
+    { name: 'Biologi', color: 'emerald' },
+    { name: 'Sejarah', color: 'amber' },
+    { name: 'Geografi', color: 'lime' },
+    { name: 'Ekonomi', color: 'orange' },
+    { name: 'Sosiologi', color: 'rose' },
+    { name: 'PKN', color: 'red' },
+    { name: 'Seni Budaya', color: 'violet' },
+    { name: 'Penjaskes', color: 'teal' },
+    { name: 'TIK', color: 'indigo' },
+  ];
+  for (let i = 0; i < SUBJECTS.length; i++) {
+    await prisma.subject.create({ data: { ...SUBJECTS[i], sort_order: i } });
+  }
+
+  const GRADE_LEVELS = [
+    { value: 'X', label: 'Kelas 10' },
+    { value: 'XI', label: 'Kelas 11' },
+    { value: 'XII', label: 'Kelas 12' },
+  ];
+  for (let i = 0; i < GRADE_LEVELS.length; i++) {
+    await prisma.gradeLevel.create({ data: { ...GRADE_LEVELS[i], sort_order: i } });
+  }
+
+  const MAJORS = [
+    { value: 'IPA', label: 'IPA' },
+    { value: 'IPS', label: 'IPS' },
+    { value: 'Bahasa', label: 'Bahasa' },
+  ];
+  for (let i = 0; i < MAJORS.length; i++) {
+    await prisma.major.create({ data: { ...MAJORS[i], sort_order: i } });
+  }
+  console.log(`✅ Seeded ${SUBJECTS.length} subjects, ${GRADE_LEVELS.length} grade levels, ${MAJORS.length} majors\n`);
 
   const hashedPassword = await bcrypt.hash('password123', 10);
 
@@ -95,6 +139,24 @@ async function main() {
   ]);
   console.log(`✅ Created ${admins.length} admins (2 active, 1 inactive)\n`);
 
+  // ==================== CREATE DISTRIBUTABLE ADMINS (team) ====================
+  // Akun siap-bagi: 5 admin untuk 5 anggota tim. Username pola admin_tim1..admin_tim5.
+  console.log('👤 Creating distributable team admins...');
+  for (let i = 1; i <= 5; i++) {
+    const teamAdmin = await prisma.user.create({
+      data: {
+        username: `admin_tim${i}`,
+        password: hashedPassword,
+        role: 'admin',
+        is_active: true,
+        admin: { create: { full_name: `Admin Tim ${i}` } },
+      },
+      include: { admin: true },
+    });
+    admins.push(teamAdmin);
+  }
+  console.log(`✅ Created 5 distributable team admins (admin_tim1..admin_tim5)\n`);
+
   // ==================== CREATE TEACHERS ====================
   console.log('👨‍🏫 Creating teachers...');
   const teacherData = [
@@ -131,6 +193,33 @@ async function main() {
   }
   console.log(`✅ Created ${teachers.length} teachers (7 active, 1 inactive, 1 coordinator)\n`);
 
+  // ==================== CREATE DISTRIBUTABLE TEACHERS (team) ====================
+  // Akun siap-bagi: 5 guru untuk 5 anggota tim. Username pola guru_tim1..guru_tim5.
+  // Ditambahkan SETELAH 8 guru di atas agar index teachers[0..6] di subjectData tetap valid.
+  console.log('👨‍🏫 Creating distributable team teachers...');
+  const teamTeacherSubjects = ['Matematika', 'Bahasa Inggris', 'Geografi', 'Sosiologi', 'TIK'];
+  for (let i = 1; i <= 5; i++) {
+    const teamTeacher = await prisma.user.create({
+      data: {
+        username: `guru_tim${i}`,
+        password: hashedPassword,
+        role: 'teacher',
+        is_active: true,
+        teacher: {
+          create: {
+            full_name: `Guru Tim ${i}`,
+            nip: `20000000000000000${i}`.slice(-18),
+            subject: teamTeacherSubjects[i - 1],
+            is_coordinator: false,
+          },
+        },
+      },
+      include: { teacher: true },
+    });
+    teachers.push(teamTeacher);
+  }
+  console.log(`✅ Created 5 distributable team teachers (guru_tim1..guru_tim5)\n`);
+
   // ==================== CREATE STUDENTS ====================
   console.log('👨‍🎓 Creating students...');
   const studentData = [];
@@ -161,6 +250,33 @@ async function main() {
     }
   }
 
+  // ==================== DISTRIBUTABLE STUDENTS (team + tester) ====================
+  // Akun siap-bagi: 5 siswa untuk anggota tim, 5 siswa untuk tester.
+  // Semua aktif & ditempatkan di XII-IPA agar otomatis terdaftar pada ujian XII/IPA
+  // (termasuk satu ujian ONGOING) sehingga bisa langsung dipakai uji coba.
+  for (let i = 1; i <= 5; i++) {
+    studentData.push({
+      username: `siswa_tim${i}`,
+      nama: `Siswa Tim ${i}`,
+      nisn: `90${String(i).padStart(8, '0')}`,
+      classroom: 'XII-IPA-Tim',
+      gradeLevel: 'XII',
+      major: 'IPA',
+      active: true,
+    });
+  }
+  for (let i = 1; i <= 5; i++) {
+    studentData.push({
+      username: `siswa_tester${i}`,
+      nama: `Siswa Tester ${i}`,
+      nisn: `91${String(i).padStart(8, '0')}`,
+      classroom: 'XII-IPA-Tester',
+      gradeLevel: 'XII',
+      major: 'IPA',
+      active: true,
+    });
+  }
+
   const students = [];
   for (const studentItem of studentData) {
     const user = await prisma.user.create({
@@ -183,7 +299,8 @@ async function main() {
     });
     students.push(user);
   }
-  console.log(`✅ Created ${students.length} students (100 active, ${students.length - 100} inactive)\n`);
+  const activeStudentCount = studentData.filter(s => s.active).length;
+  console.log(`✅ Created ${students.length} students (${activeStudentCount} active, ${students.length - activeStudentCount} inactive)\n`);
 
   // ==================== CREATE QUESTIONS ====================
   console.log('📝 Creating questions (Single Choice, Multiple Choice, Essay)...');
@@ -863,9 +980,9 @@ async function main() {
 
   // ==================== SUMMARY ====================
   console.log('📊 =============== SEEDING SUMMARY ===============');
-  console.log(`✅ Admins: ${admins.length} (2 active, 1 inactive)`);
-  console.log(`✅ Teachers: ${teachers.length} (7 active, 1 inactive)`);
-  console.log(`✅ Students: ${students.length} (100 active, ${students.length - 100} inactive)`);
+  console.log(`✅ Admins: ${admins.length} (2 demo + 5 tim, 1 inactive)`);
+  console.log(`✅ Teachers: ${teachers.length} (8 demo + 5 tim, 1 inactive)`);
+  console.log(`✅ Students: ${students.length} (${activeStudentCount} active, ${students.length - activeStudentCount} inactive)`);
   console.log(`✅ Questions: ${questionCount} (Single Choice, Multiple Choice, Essay)`);
   console.log(`✅ Exams: ${exams.length} (SCHEDULED, ONGOING, ENDED)`);
   console.log(`✅ Exam-Question Assignments: ${examQuestionCount}`);
@@ -888,6 +1005,17 @@ async function main() {
   console.log('   Admin: admin1 / password123');
   console.log('   Teacher: guru_mtk / password123');
   console.log('   Student: siswa1 / password123');
+  console.log('');
+  console.log('🎟️  ============ AKUN SIAP-BAGI (password: password123) ============');
+  console.log('   Untuk ANGGOTA TIM (5 orang) — tiap orang dapat 1 set admin+guru+siswa:');
+  console.log('     Admin : admin_tim1, admin_tim2, admin_tim3, admin_tim4, admin_tim5');
+  console.log('     Guru  : guru_tim1,  guru_tim2,  guru_tim3,  guru_tim4,  guru_tim5');
+  console.log('     Siswa : siswa_tim1, siswa_tim2, siswa_tim3, siswa_tim4, siswa_tim5');
+  console.log('   Untuk TESTER (5 orang) — tiap orang dapat 1 akun siswa:');
+  console.log('     Siswa : siswa_tester1, siswa_tester2, siswa_tester3, siswa_tester4, siswa_tester5');
+  console.log('   Catatan: semua siswa siap-bagi berada di kelas XII-IPA dan otomatis');
+  console.log('   terdaftar pada ujian XII/IPA (termasuk 1 ujian yang sedang ONGOING).');
+  console.log('================================================================');
 }
 
 main()

@@ -8,6 +8,7 @@
     "test:bb": "jest tests/blackbox --runInBand --forceExit",
     "test:coverage": "jest --coverage --forceExit",
     "dev": "nodemon index.js",
+    "ngrok": "ngrok start --all --config \"%LOCALAPPDATA%\\ngrok\\ngrok.yml\" --config \"./ngrok.yml\"",
     "start": "node index.js",
     "build": "npm install && npx prisma generate",
     "lint": "node scripts/lintSyntax.js",
@@ -32,7 +33,8 @@
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
     "joi": "^18.0.2",
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.1.1"
   },
   "devDependencies": {
     "jest": "^30.3.0",

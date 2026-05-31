@@ -84,12 +84,9 @@ const createExam = asyncHandler(async (req, res) => {
   });
 
   // Activity log
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'CREATE_EXAM',
-    description: `${teacher.full_name} membuat ujian "${result.exam.exam_name}"`,
-    metadata: { exam_id: result.exam.exam_id, exam_name: result.exam.exam_name, teacher_id: teacher.teacher_id },
-  });
+  await activityLogService.logFromRequest(req, 'CREATE_EXAM',
+    `${teacher.full_name} membuat ujian "${result.exam.exam_name}"`,
+    { metadata: { exam_id: result.exam.exam_id, exam_name: result.exam.exam_name, teacher_id: teacher.teacher_id } });
 
   res.status(201).json({
     message: 'Ujian berhasil dibuat',
@@ -220,12 +217,9 @@ const updateExam = asyncHandler(async (req, res) => {
   });
 
   // Activity log
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'UPDATE_EXAM',
-    description: `${teacher.full_name} memperbarui ujian "${updated.exam_name}"`,
-    metadata: { exam_id: updated.exam_id, exam_name: updated.exam_name, updated_by: teacher.teacher_id },
-  });
+  await activityLogService.logFromRequest(req, 'UPDATE_EXAM',
+    `${teacher.full_name} memperbarui ujian "${updated.exam_name}"`,
+    { metadata: { exam_id: updated.exam_id, exam_name: updated.exam_name, updated_by: teacher.teacher_id } });
 
   res.json({ message: 'Ujian berhasil diperbarui', exam: updated });
 });
@@ -255,12 +249,9 @@ const deleteExam = asyncHandler(async (req, res) => {
   });
 
   // Activity log
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'DELETE_EXAM',
-    description: `${teacher.full_name} menghapus ujian "${exam.exam_name}"`,
-    metadata: { exam_id: exam.exam_id, exam_name: exam.exam_name, deleted_by: teacher.teacher_id },
-  });
+  await activityLogService.logFromRequest(req, 'DELETE_EXAM',
+    `${teacher.full_name} menghapus ujian "${exam.exam_name}"`,
+    { metadata: { exam_id: exam.exam_id, exam_name: exam.exam_name, deleted_by: teacher.teacher_id } });
 
   res.json({ message: 'Ujian berhasil dihapus' });
 });
@@ -615,12 +606,9 @@ const reassignStudents = asyncHandler(async (req, res) => {
   });
 
   // Activity log
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'REASSIGN_STUDENTS',
-    description: `${teacher.full_name} melakukan reassign peserta ujian "${exam.exam_name}" (${grade_level} ${major || ''})`,
-    metadata: { exam_id: parseInt(exam_id), grade_level, major, removed: result.removed, assigned: result.assigned },
-  });
+  await activityLogService.logFromRequest(req, 'REASSIGN_STUDENTS',
+    `${teacher.full_name} melakukan reassign peserta ujian "${exam.exam_name}" (${grade_level} ${major || ''})`,
+    { metadata: { exam_id: parseInt(exam_id), grade_level, major, removed: result.removed, assigned: result.assigned } });
 
   res.json({
     message: `Peserta berhasil di-reassign. ${result.removed} dihapus, ${result.assigned} ditambahkan.`,

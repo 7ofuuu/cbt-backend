@@ -5,6 +5,7 @@
 const prisma = require('../config/db');
 const crypto = require('crypto');
 const { asyncHandler, AppError } = require('../utils/asyncHandler');
+const { ensureAccessPassword } = require('../services/examService');
 
 // Helper: generate random unlock code (6 characters, cryptographically secure)
 const generateUnlockCodeStr = () => {
@@ -120,6 +121,7 @@ exports.getExamParticipants = asyncHandler(async (req, res) => {
     if (p.is_blocked) statusLabel = 'Blocked';
     else if (p.exam_status === 'IN_PROGRESS') statusLabel = 'On Progress';
     else if (p.exam_status === 'COMPLETED') statusLabel = 'Submitted';
+    else if (p.exam_status === 'GRADED') statusLabel = 'Submitted';
 
     return {
       exam_participant_id: p.exam_participant_id,
@@ -138,6 +140,10 @@ exports.getExamParticipants = asyncHandler(async (req, res) => {
     };
   });
 
+  // Exam access password for encrypted pre-download — visible to admin only,
+  // lazily generated once the exam is within the H-1 window (null before that).
+  const accessPassword = await ensureAccessPassword(exam);
+
   res.json({
     success: true,
     data: {
@@ -150,6 +156,7 @@ exports.getExamParticipants = asyncHandler(async (req, res) => {
         start_date: exam.start_date,
         end_date: exam.end_date,
         duration_minutes: exam.duration_minutes,
+        access_password: accessPassword,
       },
       participants: formattedParticipants,
     },
@@ -174,6 +181,7 @@ exports.getParticipantDetail = asyncHandler(async (req, res) => {
   if (ep.is_blocked) statusLabel = 'Blocked';
   else if (ep.exam_status === 'IN_PROGRESS') statusLabel = 'On Progress';
   else if (ep.exam_status === 'COMPLETED') statusLabel = 'Submitted';
+  else if (ep.exam_status === 'GRADED') statusLabel = 'Submitted';
 
   res.json({
     success: true,

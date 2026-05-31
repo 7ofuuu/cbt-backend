@@ -5,8 +5,30 @@
  */
 const prisma = require('../config/db');
 const { asyncHandler, AppError } = require('../utils/asyncHandler');
+const { ok } = require('../utils/response');
 const { calculateScore } = require('../services/scoreService');
+const { ensureAccessPassword, shuffleArray } = require('../services/examService');
+const { encryptPayload } = require('../utils/examCrypto');
 const activityLogService = require('../services/activityLogService');
+
+// Map an exam_question record to the wire shape, deliberately omitting
+// is_correct so answer keys never reach the device (online or pre-download).
+const toClientQuestion = (eq) => ({
+  exam_question_id: eq.exam_question_id,
+  sequence: eq.sequence,
+  score_weight: eq.score_weight,
+  question: {
+    question_id: eq.question.question_id,
+    question_type: eq.question.question_type,
+    question_text: eq.question.question_text,
+    question_image: eq.question.question_image,
+    answer_options: eq.question.answer_options.map((o) => ({
+      option_id: o.option_id,
+      label: o.label,
+      option_text: o.option_text,
+    })),
+  },
+});
 
 // GET /api/student/exams - Get student's assigned exams
 const getMyExams = asyncHandler(async (req, res) => {
@@ -157,49 +179,21 @@ const startExam = asyncHandler(async (req, res) => {
   const effectiveEnd = examEndByDuration < end ? examEndByDuration : end;
   const remainingMs = Math.max(0, effectiveEnd.getTime() - now.getTime());
 
-  // Prepare questions (hide correct answers)
-  let questions = exam.exam_questions.map(eq => ({
-    exam_question_id: eq.exam_question_id,
-    sequence: eq.sequence,
-    score_weight: eq.score_weight,
-    question: {
-      question_id: eq.question.question_id,
-      question_type: eq.question.question_type,
-      question_text: eq.question.question_text,
-      question_image: eq.question.question_image,
-      answer_options: eq.question.answer_options.map(o => ({
-        option_id: o.option_id,
-        label: o.label,
-        option_text: o.option_text,
-        // is_correct intentionally omitted
-      })),
-    },
-  }));
-
-  // Shuffle if enabled
-  if (exam.is_shuffle_questions) {
-    for (let i = questions.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [questions[i], questions[j]] = [questions[j], questions[i]];
-    }
-  }
-
-  // Get existing answers
+  // Questions are no longer returned here — the client reads them from the
+  // encrypted package downloaded via /prefetch and decrypted locally with the
+  // exam password. This endpoint only owns the session state.
   const existingAnswers = await prisma.answer.findMany({
     where: { exam_participant_id: examParticipant.exam_participant_id },
     select: { question_id: true, mc_option_ids: true, essay_answer_text: true },
   });
 
   // Log activity
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    exam_participant_id: examParticipant.exam_participant_id,
-    activity_type: 'START_EXAM',
-    description: `Student started exam: ${exam.exam_name}`,
-    ip_address: activityLogService.getIpAddress(req),
-    user_agent: activityLogService.getUserAgent(req),
-    metadata: { exam_id: exam.exam_id, exam_participant_id: examParticipant.exam_participant_id },
-  });
+  await activityLogService.logFromRequest(req, 'START_EXAM',
+    `Student started exam: ${exam.exam_name}`,
+    {
+      exam_participant_id: examParticipant.exam_participant_id,
+      metadata: { exam_id: exam.exam_id, exam_participant_id: examParticipant.exam_participant_id },
+    });
 
   res.json({
     exam_participant_id: examParticipant.exam_participant_id,
@@ -211,9 +205,64 @@ const startExam = asyncHandler(async (req, res) => {
       end_date: exam.end_date,
     },
     remaining_seconds: Math.floor(remainingMs / 1000),
-    total_questions: questions.length,
-    questions,
+    total_questions: exam.exam_questions.length,
     existing_answers: existingAnswers,
+  });
+});
+
+// GET /api/students/exams/:examId/prefetch - Download the encrypted exam
+// package. Available from H-1; opaque until unlocked locally with the exam
+// password the proctor announces at start. Does NOT start the session.
+const prefetchExam = asyncHandler(async (req, res) => {
+  const student = req.student;
+  const examId = parseInt(req.params.examId);
+  if (!examId) throw new AppError('examId tidak valid', 400);
+
+  const examParticipant = await prisma.examParticipant.findFirst({
+    where: { exam_id: examId, student_id: student.student_id },
+    include: {
+      exam: {
+        include: {
+          exam_questions: {
+            include: { question: { include: { answer_options: true } } },
+            orderBy: { sequence: 'asc' },
+          },
+        },
+      },
+    },
+  });
+
+  if (!examParticipant) throw new AppError('Anda tidak terdaftar pada ujian ini', 404);
+
+  const exam = examParticipant.exam;
+
+  if (new Date() > new Date(exam.end_date)) {
+    throw new AppError('Waktu ujian sudah berakhir', 400);
+  }
+  if (!exam.exam_questions || exam.exam_questions.length === 0) {
+    throw new AppError('Ujian belum memiliki soal. Hubungi guru untuk menambahkan bank soal.', 400);
+  }
+
+  // The package (and its password) only become available H-1.
+  const password = await ensureAccessPassword(exam);
+  if (!password) {
+    throw new AppError('Paket ujian baru tersedia H-1 sebelum ujian dimulai', 403);
+  }
+
+  let questions = exam.exam_questions.map(toClientQuestion);
+  if (exam.is_shuffle_questions) questions = shuffleArray(questions);
+
+  return ok(res, {
+    exam: {
+      exam_id: exam.exam_id,
+      exam_name: exam.exam_name,
+      subject: exam.subject,
+      duration_minutes: exam.duration_minutes,
+      end_date: exam.end_date,
+    },
+    exam_participant_id: examParticipant.exam_participant_id,
+    total_questions: questions.length,
+    encrypted: encryptPayload({ questions }, password),
   });
 });
 
@@ -339,12 +388,13 @@ const finishExam = asyncHandler(async (req, res) => {
 
   if (!exam_participant_id) throw new AppError('exam_participant_id wajib diisi', 400);
 
-  // Atomically update status to prevent double-finish
+  // Atomically update status to prevent double-finish; skip if participant is blocked
   const updateResult = await prisma.examParticipant.updateMany({
     where: {
       exam_participant_id: parseInt(exam_participant_id),
       student_id: student.student_id,
       exam_status: 'IN_PROGRESS',
+      is_blocked: false,
     },
     data: {
       exam_status: 'COMPLETED',
@@ -353,6 +403,12 @@ const finishExam = asyncHandler(async (req, res) => {
   });
 
   if (updateResult.count === 0) {
+    // Distinguish blocked from already-finished so the client can react appropriately
+    const ep = await prisma.examParticipant.findFirst({
+      where: { exam_participant_id: parseInt(exam_participant_id), student_id: student.student_id },
+      select: { is_blocked: true, exam_status: true },
+    });
+    if (ep?.is_blocked) throw new AppError('Ujian tidak dapat diselesaikan karena peserta diblokir', 403);
     throw new AppError('Ujian tidak ditemukan, bukan milik Anda, atau sudah selesai', 400);
   }
 
@@ -396,19 +452,12 @@ const finishExam = asyncHandler(async (req, res) => {
   }
 
   // Log activity
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    exam_participant_id: parseInt(exam_participant_id),
-    activity_type: 'FINISH_EXAM',
-    description: `Student finished exam: ${participant.exam.exam_name}`,
-    ip_address: activityLogService.getIpAddress(req),
-    user_agent: activityLogService.getUserAgent(req),
-    metadata: {
-      exam_id: participant.exam.exam_id,
-      final_score: finalScore,
-      has_essay: hasEssay,
-    },
-  });
+  await activityLogService.logFromRequest(req, 'FINISH_EXAM',
+    `Student finished exam: ${participant.exam.exam_name}`,
+    {
+      exam_participant_id: parseInt(exam_participant_id),
+      metadata: { exam_id: participant.exam.exam_id, final_score: finalScore, has_essay: hasEssay },
+    });
 
   res.json({
     message: 'Ujian berhasil diselesaikan',
@@ -462,15 +511,12 @@ const reportViolation = asyncHandler(async (req, res) => {
   });
 
   // Log violation
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    exam_participant_id: parseInt(exam_participant_id),
-    activity_type: 'EXAM_VIOLATION',
-    description: `Violation reported: ${violation_type}`,
-    ip_address: activityLogService.getIpAddress(req),
-    user_agent: activityLogService.getUserAgent(req),
-    metadata: { violation_type, details, exam_participant_id: parseInt(exam_participant_id) },
-  });
+  await activityLogService.logFromRequest(req, 'EXAM_VIOLATION',
+    `Violation reported: ${violation_type}`,
+    {
+      exam_participant_id: parseInt(exam_participant_id),
+      metadata: { violation_type, details, exam_participant_id: parseInt(exam_participant_id) },
+    });
 
   res.json({
     message: 'Pelanggaran dilaporkan',
@@ -478,4 +524,4 @@ const reportViolation = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { getMyExams, startExam, submitAnswer, finishExam, reportViolation };
+module.exports = { getMyExams, startExam, prefetchExam, submitAnswer, finishExam, reportViolation };

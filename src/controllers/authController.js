@@ -80,14 +80,9 @@ const login = asyncHandler(async (req, res) => {
     { expiresIn: '1d', algorithm: 'HS256' }
   );
 
-  await activityLogService.createLog({
-    user_id: user.id,
-    activity_type: 'LOGIN',
-    description: `User ${username} (${user.role}) berhasil login`,
-    ip_address: activityLogService.getIpAddress(req),
-    user_agent: activityLogService.getUserAgent(req),
-    metadata: { username, role: user.role },
-  });
+  await activityLogService.logFromRequest(req, 'LOGIN',
+    `User ${username} (${user.role}) berhasil login`,
+    { user_id: user.id, metadata: { username, role: user.role } });
 
   res.json({
     message: 'Login berhasil',
@@ -222,8 +217,11 @@ const changePassword = asyncHandler(async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user.id } });
   if (!user) throw new AppError('User tidak ditemukan', 404);
 
+  // 400 (not 401): the session is valid, only the supplied current password is
+  // wrong. A 401 here would trip the dashboard's global "session expired" handler
+  // and log the user out instead of showing the error.
   const validPassword = await bcrypt.compare(current_password, user.password);
-  if (!validPassword) throw new AppError('Password saat ini salah', 401);
+  if (!validPassword) throw new AppError('Password saat ini salah', 400);
 
   const hashedPassword = await bcrypt.hash(new_password, SALT_ROUNDS);
   await prisma.user.update({
@@ -231,14 +229,9 @@ const changePassword = asyncHandler(async (req, res) => {
     data: { password: hashedPassword },
   });
 
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'CHANGE_PASSWORD',
-    description: `User ${user.username} (${user.role}) berhasil mengubah password`,
-    ip_address: activityLogService.getIpAddress(req),
-    user_agent: activityLogService.getUserAgent(req),
-    metadata: { username: user.username, role: user.role },
-  });
+  await activityLogService.logFromRequest(req, 'CHANGE_PASSWORD',
+    `User ${user.username} (${user.role}) berhasil mengubah password`,
+    { metadata: { username: user.username, role: user.role } });
 
   res.json({ message: 'Password berhasil diubah' });
 });
@@ -248,14 +241,9 @@ const logout = asyncHandler(async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { username: true } });
   const username = user?.username || `ID:${req.user.id}`;
 
-  await activityLogService.createLog({
-    user_id: req.user.id,
-    activity_type: 'LOGOUT',
-    description: `User ${username} (${req.user.role}) berhasil logout`,
-    ip_address: activityLogService.getIpAddress(req),
-    user_agent: activityLogService.getUserAgent(req),
-    metadata: { username, role: req.user.role },
-  });
+  await activityLogService.logFromRequest(req, 'LOGOUT',
+    `User ${username} (${req.user.role}) berhasil logout`,
+    { metadata: { username, role: req.user.role } });
 
   res.json({ message: 'Logout berhasil' });
 });
