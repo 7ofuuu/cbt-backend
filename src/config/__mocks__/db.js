@@ -7,6 +7,7 @@ const prisma = {
     update: jest.fn(),
     count: jest.fn(),
     updateMany: jest.fn(),
+    delete: jest.fn(),
     deleteMany: jest.fn(),
   },
   student: {
@@ -14,6 +15,9 @@ const prisma = {
     findMany: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
+    delete: jest.fn(),
+    deleteMany: jest.fn(),
     count: jest.fn(),
   },
   teacher: {
@@ -21,6 +25,7 @@ const prisma = {
     findMany: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    delete: jest.fn(),
     count: jest.fn(),
   },
   admin: {
@@ -28,6 +33,7 @@ const prisma = {
     findMany: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    delete: jest.fn(),
     count: jest.fn(),
   },
   exam: {
@@ -36,6 +42,7 @@ const prisma = {
     findFirst: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
     count: jest.fn(),
     delete: jest.fn(),
   },
@@ -65,12 +72,14 @@ const prisma = {
     findUnique: jest.fn(),
     findMany: jest.fn(),
     create: jest.fn(),
+    deleteMany: jest.fn(),
     count: jest.fn(),
   },
   answer: {
     findUnique: jest.fn(),
     findMany: jest.fn(),
     upsert: jest.fn(),
+    update: jest.fn(),
     deleteMany: jest.fn(),
     create: jest.fn(),
   },
@@ -85,6 +94,7 @@ const prisma = {
     findMany: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
     delete: jest.fn(),
     count: jest.fn(),
   },
@@ -93,9 +103,13 @@ const prisma = {
     findFirst: jest.fn(),
     findMany: jest.fn(),
     create: jest.fn(),
+    createMany: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
     delete: jest.fn(),
+    deleteMany: jest.fn(),
     count: jest.fn(),
+    groupBy: jest.fn(),
   },
   activityLog: {
     findMany: jest.fn(),
@@ -104,7 +118,29 @@ const prisma = {
   },
   schoolProfile: {
     findFirst: jest.fn(),
+    findUnique: jest.fn(),
     upsert: jest.fn(),
+  },
+  subject: {
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
+  },
+  gradeLevel: {
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
+  },
+  major: {
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
   },
   // Transaction passthrough: executes callback with mock prisma as tx
   $transaction: jest.fn((fn) => {
