@@ -1,6 +1,6 @@
 /**
  * Black Box Test: Auth Endpoints
- * BB-1 — SB-62 & SB-63
+ * BB-1 - SB-62 & SB-63
  * Endpoints: POST /api/auth/login, /register, /logout, GET /api/auth/me, PATCH /api/auth/change-password
  */
 jest.mock('../../src/config/db');

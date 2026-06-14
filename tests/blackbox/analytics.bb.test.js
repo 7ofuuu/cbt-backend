@@ -1,6 +1,6 @@
 /**
  * Black Box Test: Analytics Endpoints
- * BB-5 — SB-71 & SB-72
+ * BB-5 - SB-71 & SB-72
  * Endpoints: /api/analytics/*
  */
 jest.mock('../../src/config/db');

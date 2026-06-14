@@ -8,7 +8,7 @@
  *   - Admin-only POST/PUT/DELETE.
  *   - Deletion is *soft* (is_active = false). Existing exam/student rows hold
  *     these as plain string snapshots and must keep working even after the
- *     taxonomy row is "deleted" — that's why we never hard-delete here.
+ *     taxonomy row is "deleted" - that's why we never hard-delete here.
  *   - PUT supports an opt-in `cascade_rename` flag that updates the matching
  *     string snapshot on Subject across Exam/QuestionBank/Question/Teacher,
  *     on GradeLevel/Major across Exam/QuestionBank/Question/Student. Without
@@ -18,7 +18,7 @@ const prisma = require('../config/db');
 const { asyncHandler, AppError } = require('../utils/asyncHandler');
 const { cascadeRename } = require('../services/taxonomyCascadeService');
 
-// Targets for the cascade rename — kept here next to the controller because
+// Targets for the cascade rename - kept here next to the controller because
 // they describe *which historical snapshots this taxonomy lives in*, which
 // is controller-level knowledge, not generic service knowledge.
 const SUBJECT_TARGETS = [
@@ -36,7 +36,7 @@ const GRADE_LEVEL_TARGETS = [
 const MAJOR_TARGETS = GRADE_LEVEL_TARGETS;
 
 // ---------------------------------------------------------------------------
-// Combined GET — single call for the dashboard's TaxonomyContext.
+// Combined GET - single call for the dashboard's TaxonomyContext.
 // ---------------------------------------------------------------------------
 const getTaxonomy = asyncHandler(async (req, res) => {
   // ?include_inactive=true → admin master-data page wants everything

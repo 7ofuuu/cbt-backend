@@ -9,73 +9,73 @@ REST API server for Computer-Based Test (CBT) system. Provides 92 endpoints for 
 ## Features
 
 ### Authentication & Authorization
-- **JWT Authentication** — Token-based auth, 24-hour expiry
-- **Role-Based Access Control** — Three roles: Admin, Teacher, Student
-- **Super Admin Protection** — Special admin account cannot be deleted or modified by other admins
-- **Password Policy** — 8+ chars, uppercase, lowercase, digits required
+- **JWT Authentication** - Token-based auth, 24-hour expiry
+- **Role-Based Access Control** - Three roles: Admin, Teacher, Student
+- **Super Admin Protection** - Special admin account cannot be deleted or modified by other admins
+- **Password Policy** - 8+ chars, uppercase, lowercase, digits required
 
 ### Question Management (Teacher)
-- **Question Banks** — Create banks with globally unique names
-- **Question Types** — Single Choice, Multiple Choice, Essay
-- **Answer Options** — Configure correct/incorrect options per question
-- **Bulk Assign** — Assign entire banks to exams
-- **Question Filtering** — Filter by subject, grade level, major, type
+- **Question Banks** - Create banks with globally unique names
+- **Question Types** - Single Choice, Multiple Choice, Essay
+- **Answer Options** - Configure correct/incorrect options per question
+- **Bulk Assign** - Assign entire banks to exams
+- **Question Filtering** - Filter by subject, grade level, major, type
 
 ### Exam Management (Teacher)
-- **Exam Creation** — Define exams with start/end dates, duration
-- **Student Auto-Assign** — Automatically assign matching students by grade + major
-- **Question Assignment** — Assign individual questions or entire banks
-- **Question Shuffle** — Optional randomization of question order
-- **Participant Tracking** — Monitor exam participation status
+- **Exam Creation** - Define exams with start/end dates, duration
+- **Student Auto-Assign** - Automatically assign matching students by grade + major
+- **Question Assignment** - Assign individual questions or entire banks
+- **Question Shuffle** - Optional randomization of question order
+- **Participant Tracking** - Monitor exam participation status
 
 ### Exam Taking (Student)
-- **Encrypted Pre-Download** — Download the exam package (questions, no answer keys) from H-1 as a sealed envelope; opened locally with the proctor-announced password (PBKDF2-HMAC-SHA256 → AES-256-GCM)
-- **Start Exam** — Begin exam session online (records status + `start_time`); questions come from the decrypted package
-- **Auto-Save Answers** — Submit answers to server on selection
-- **Question Navigation** — View all questions, track answered/unanswered
-- **Auto-Finish** — Exam auto-finishes when deadline expires (server-side)
+- **Encrypted Pre-Download** - Download the exam package (questions, no answer keys) from H-1 as a sealed envelope; opened locally with the proctor-announced password (PBKDF2-HMAC-SHA256 → AES-256-GCM)
+- **Start Exam** - Begin exam session online (records status + `start_time`); questions come from the decrypted package
+- **Auto-Save Answers** - Submit answers to server on selection
+- **Question Navigation** - View all questions, track answered/unanswered
+- **Auto-Finish** - Exam auto-finishes when deadline expires (server-side)
 
 ### Grading & Results
-- **Auto-Grading** — Instant scoring for Multiple Choice questions
-- **Manual Grading** — Teacher can grade essay questions and finalize scores
-- **Result Tracking** — Persist final scores and submission metadata
+- **Auto-Grading** - Instant scoring for Multiple Choice questions
+- **Manual Grading** - Teacher can grade essay questions and finalize scores
+- **Result Tracking** - Persist final scores and submission metadata
 
 ### Background Automation
-- **Auto-Finish Scheduler** — Checks every 60s, auto-finishes sessions past deadline
-- **Auto-Expire Scheduler** — Checks every 60s, marks exams ENDED after deadline
-- **Deadline Enforcement** — Global `end_date` binding for all participants
+- **Auto-Finish Scheduler** - Checks every 60s, auto-finishes sessions past deadline
+- **Auto-Expire Scheduler** - Checks every 60s, marks exams ENDED after deadline
+- **Deadline Enforcement** - Global `end_date` binding for all participants
 
 ### Admin Controls
-- **User Management** — CRUD admin/teacher/student accounts, batch import
-- **Activity Monitoring** — Real-time exam status view (not started, in progress, completed)
-- **Block/Unblock** — Block cheating students, generate unlock codes for unblock
-- **Activity Logs** — View login history, exam events (start, finish, auto-finish)
-- **Active Users** — List users logged in within N hours
+- **User Management** - CRUD admin/teacher/student accounts, batch import
+- **Activity Monitoring** - Real-time exam status view (not started, in progress, completed)
+- **Block/Unblock** - Block cheating students, generate unlock codes for unblock
+- **Activity Logs** - View login history, exam events (start, finish, auto-finish)
+- **Active Users** - List users logged in within N hours
 
 ### Analytics
-- **Teacher Dashboard** — Exam overview, question statistics, performance metrics
-- **Coordinator Audit** — Multi-teacher analytics and comparison data
-- **Score Distribution** — Analyze results by exam, class, or student
+- **Teacher Dashboard** - Exam overview, question statistics, performance metrics
+- **Coordinator Audit** - Multi-teacher analytics and comparison data
+- **Score Distribution** - Analyze results by exam, class, or student
 
 ### School Profile
-- **Public Endpoint** — Fetch school name, logo, contact info
-- **Admin Update** — Update school identity information
+- **Public Endpoint** - Fetch school name, logo, contact info
+- **Admin Update** - Update school identity information
 
 ### Dynamic Taxonomy
-- **Subjects / Grade Levels / Majors** — Stored as editable rows instead of hardcoded constants
-- **Public Read** — Dashboard and Flutter pull dropdown options from one endpoint
-- **Soft Delete** — Deactivated rows still resolve on historical exam/student data
-- **Opt-in Cascade Rename** — Admin can propagate a rename across `Exam`, `QuestionBank`, `Question`, `Teacher`, and `Student` snapshots in a single transaction
+- **Subjects / Grade Levels / Majors** - Stored as editable rows instead of hardcoded constants
+- **Public Read** - Dashboard and Flutter pull dropdown options from one endpoint
+- **Soft Delete** - Deactivated rows still resolve on historical exam/student data
+- **Opt-in Cascade Rename** - Admin can propagate a rename across `Exam`, `QuestionBank`, `Question`, `Teacher`, and `Student` snapshots in a single transaction
 
 ### File Upload
-- **Multer Disk Storage** — Image-only, 5 MB cap, PNG / JPG / WEBP / GIF
-- **Two Buckets** — `uploads/logos/` (admin only) and `uploads/questions/` (teacher + admin)
-- **Static Serving** — `/uploads/*` served with `Cross-Origin-Resource-Policy: cross-origin` so the dashboard on a different port can render the images
+- **Multer Disk Storage** - Image-only, 5 MB cap, PNG / JPG / WEBP / GIF
+- **Two Buckets** - `uploads/logos/` (admin only) and `uploads/questions/` (teacher + admin)
+- **Static Serving** - `/uploads/*` served with `Cross-Origin-Resource-Policy: cross-origin` so the dashboard on a different port can render the images
 
 ### Exam Archival
-- **Teacher Submit** — Once grading is final, teacher submits the exam to move it from active to archive
-- **`teacher_submitted_at`** — Timestamp gates inclusion in the active vs archived list endpoints
-- **Shared Formatter** — `formatExamForList` keeps the active and archived projections identical
+- **Teacher Submit** - Once grading is final, teacher submits the exam to move it from active to archive
+- **`teacher_submitted_at`** - Timestamp gates inclusion in the active vs archived list endpoints
+- **Shared Formatter** - `formatExamForList` keeps the active and archived projections identical
 
 ---
 
@@ -92,7 +92,7 @@ REST API server for Computer-Based Test (CBT) system. Provides 92 endpoints for 
 | Validation | Joi | Latest |
 | File Upload | multer | Latest |
 | Security | helmet (CSP disabled, CORP cross-origin) | Latest |
-| Task Scheduling | setInterval (60 s tick) | — |
+| Task Scheduling | setInterval (60 s tick) | - |
 | Testing | Jest + supertest | Latest |
 
 ---
@@ -132,12 +132,12 @@ CORS_ORIGINS="http://localhost:3001,http://localhost:3000"
 ```
 
 **Environment Variables Reference:**
-- `DATABASE_URL` — MySQL connection string (user:password@host:port/database)
-- `PORT` — Server port (default 3000)
-- `JWT_SECRET` — Secret key for JWT signing (use strong random string in production)
-- `CORS_ORIGINS` — Comma-separated allowed origins for CORS
-- `ALLOW_NGROK_ORIGINS` — Set `true` to permit any `*.ngrok-free.app` / `*.ngrok.app` origin (dev only — keep off in production). See [NGROK-FIREBASE-SETUP.md](../NGROK-FIREBASE-SETUP.md).
-- `ALLOW_VERCEL_ORIGINS` — Set `true` to permit any `*.vercel.app` origin so the Vercel-hosted dashboard can call this API (it reaches the backend via the ngrok URL). For production, pin the exact Vercel domain in `CORS_ORIGINS` and keep this off.
+- `DATABASE_URL` - MySQL connection string (user:password@host:port/database)
+- `PORT` - Server port (default 3000)
+- `JWT_SECRET` - Secret key for JWT signing (use strong random string in production)
+- `CORS_ORIGINS` - Comma-separated allowed origins for CORS
+- `ALLOW_NGROK_ORIGINS` - Set `true` to permit any `*.ngrok-free.app` / `*.ngrok.app` origin (dev only - keep off in production). See [NGROK-FIREBASE-SETUP.md](../NGROK-FIREBASE-SETUP.md).
+- `ALLOW_VERCEL_ORIGINS` - Set `true` to permit any `*.vercel.app` origin so the Vercel-hosted dashboard can call this API (it reaches the backend via the ngrok URL). For production, pin the exact Vercel domain in `CORS_ORIGINS` and keep this off.
 
 ### 4. Setup Database
 
@@ -239,8 +239,8 @@ npm run dev
 ```
 
 Server starts at `http://localhost:3000` with two background schedulers:
-- **Auto-Finish Scheduler** — Runs every 60s, auto-finishes sessions past deadline
-- **Auto-Expire Scheduler** — Runs every 60s, marks exams as ENDED
+- **Auto-Finish Scheduler** - Runs every 60s, auto-finishes sessions past deadline
+- **Auto-Expire Scheduler** - Runs every 60s, marks exams as ENDED
 
 ### Production Mode
 
@@ -276,19 +276,19 @@ npx prisma migrate resolve --rolled-back # Fix migration conflicts
 **Base URL:** `http://localhost:3000/api`
 
 **93 Endpoints** organized in 13 route groups:
-1. **Auth** (`/auth`) — Register, login, logout, profile, password change
-2. **Questions** (`/questions`) — Question banks, CRUD questions
-3. **Exams** (`/exams`) — Exam CRUD, assign questions/students
-4. **Student Exams** (`/student`) — Prefetch encrypted package, start exam, submit answers, finish exam
-5. **Users** (`/users`) — User management, role changes, batch import
-6. **Activities** (`/activities`) — Real-time exam monitoring, block/unblock
-7. **Activity Logs** (`/activity-logs`) — Query login/exam events
-8. **Exam Results** (`/exam-results`) — Grade essays, finalize scores, submit to archive
-9. **School Profile** (`/school-profile`) — Fetch/update school info
-10. **Analytics** (`/analytics`) — Teacher performance, question stats
-11. **Taxonomy** (`/taxonomy`) — Dynamic subjects / grade levels / majors with cascade rename
-12. **Upload** (`/upload`) — Logo + question image upload (multer disk storage)
-13. **Misc** (`/time`) — Trusted server time for client clock validation
+1. **Auth** (`/auth`) - Register, login, logout, profile, password change
+2. **Questions** (`/questions`) - Question banks, CRUD questions
+3. **Exams** (`/exams`) - Exam CRUD, assign questions/students
+4. **Student Exams** (`/student`) - Prefetch encrypted package, start exam, submit answers, finish exam
+5. **Users** (`/users`) - User management, role changes, batch import
+6. **Activities** (`/activities`) - Real-time exam monitoring, block/unblock
+7. **Activity Logs** (`/activity-logs`) - Query login/exam events
+8. **Exam Results** (`/exam-results`) - Grade essays, finalize scores, submit to archive
+9. **School Profile** (`/school-profile`) - Fetch/update school info
+10. **Analytics** (`/analytics`) - Teacher performance, question stats
+11. **Taxonomy** (`/taxonomy`) - Dynamic subjects / grade levels / majors with cascade rename
+12. **Upload** (`/upload`) - Logo + question image upload (multer disk storage)
+13. **Misc** (`/time`) - Trusted server time for client clock validation
 
 **All endpoints (except `/auth/login` and `/auth/register`) require JWT:**
 ```
@@ -434,12 +434,12 @@ After `db push --force-reset`, run seed and login again in dashboard because old
 
 ### Code Style
 
-- **Controllers** handle request/response only — business logic in services when complex
+- **Controllers** handle request/response only - business logic in services when complex
 - **Services** encapsulate reusable logic (activity logging, auto-finish scoring, etc.)
 - **Middleware** handles auth verification, role checking, input validation
 - **Routes** define HTTP method + path + middleware chain + controller function
 - Named routes (e.g., `/assign-question`) must be defined **before** parameterized routes (e.g., `/:id`) to avoid Express route shadowing
-- All Prisma queries use **English field names** — DB columns match field names directly (no `@map` translation)
+- All Prisma queries use **English field names** - DB columns match field names directly (no `@map` translation)
 - Error responses use `{ error: "message" }` format
 - Success responses use `{ message: "...", data: {...} }` format (varies per endpoint)
 
@@ -570,7 +570,7 @@ When a teacher creates an exam, they set `start_date` (when students can begin) 
 | `BATCH_DELETE_USERS` | Admin bulk user deletion |
 | `UPDATE_SCHOOL_PROFILE` | Admin updated school identity |
 
-> The HTTP controllers create these via `activityLogService.logFromRequest(req, type, description, extras?)` — a thin wrapper that fills `user_id` / `ip_address` / `user_agent` from the request so callers stay focused on the event payload.
+> The HTTP controllers create these via `activityLogService.logFromRequest(req, type, description, extras?)` - a thin wrapper that fills `user_id` / `ip_address` / `user_agent` from the request so callers stay focused on the event payload.
 
 ## API Documentation
 

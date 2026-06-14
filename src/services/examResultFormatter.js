@@ -1,5 +1,5 @@
 /**
- * Exam result formatters — shared between completed and archived list
+ * Exam result formatters - shared between completed and archived list
  * endpoints in examResultController. Both endpoints select the same
  * relations and project them into the same shape; this module is that
  * shape so the controllers don't drift apart over time.

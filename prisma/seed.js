@@ -1007,11 +1007,11 @@ async function main() {
   console.log('   Student: siswa1 / password123');
   console.log('');
   console.log('🎟️  ============ AKUN SIAP-BAGI (password: password123) ============');
-  console.log('   Untuk ANGGOTA TIM (5 orang) — tiap orang dapat 1 set admin+guru+siswa:');
+  console.log('   Untuk ANGGOTA TIM (5 orang) - tiap orang dapat 1 set admin+guru+siswa:');
   console.log('     Admin : admin_tim1, admin_tim2, admin_tim3, admin_tim4, admin_tim5');
   console.log('     Guru  : guru_tim1,  guru_tim2,  guru_tim3,  guru_tim4,  guru_tim5');
   console.log('     Siswa : siswa_tim1, siswa_tim2, siswa_tim3, siswa_tim4, siswa_tim5');
-  console.log('   Untuk TESTER (5 orang) — tiap orang dapat 1 akun siswa:');
+  console.log('   Untuk TESTER (5 orang) - tiap orang dapat 1 akun siswa:');
   console.log('     Siswa : siswa_tester1, siswa_tester2, siswa_tester3, siswa_tester4, siswa_tester5');
   console.log('   Catatan: semua siswa siap-bagi berada di kelas XII-IPA dan otomatis');
   console.log('   terdaftar pada ujian XII/IPA (termasuk 1 ujian yang sedang ONGOING).');

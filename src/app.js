@@ -28,7 +28,7 @@ app.set('trust proxy', 1);
 // Cross-Origin-Resource-Policy. The first one blocks <img src="…/uploads/…">
 // loaded from the dashboard (different port), and the second one blocks the
 // image even when the page itself allows it. We don't render HTML here, so CSP
-// gives no value — disable it and relax CORP to cross-origin globally.
+// gives no value - disable it and relax CORP to cross-origin globally.
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -128,7 +128,7 @@ app.get('/', (req, res) => {
   res.send('CBT Server Running');
 });
 
-// Trusted server time — clients use this to validate exam start/end windows
+// Trusted server time - clients use this to validate exam start/end windows
 // and to detect device clock tampering. Cheap, public, no auth required.
 app.get('/api/time', (req, res) => {
   res.json({ now: new Date().toISOString() });

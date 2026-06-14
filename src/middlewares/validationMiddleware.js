@@ -125,7 +125,7 @@ const validateLogin = (req, res, next) => {
   next();
 };
 
-// Generic Joi schema validator factory — use for new routes so the
+// Generic Joi schema validator factory - use for new routes so the
 // controller body stays focused on business logic. Defaults to req.body
 // but works on any request property (query, params).
 //   router.post('/x', validate(schemaA), handler)

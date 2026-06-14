@@ -1,6 +1,6 @@
 /**
  * White Box Test: Auth Controller
- * WB-1 — SB-54 & SB-55
+ * WB-1 - SB-54 & SB-55
  * Target: src/controllers/authController.js
  */
 jest.mock('../../src/config/db');

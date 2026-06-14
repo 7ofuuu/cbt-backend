@@ -2,7 +2,7 @@
  * White Box Test: Exam Result Formatter Service
  * WB-12
  * Target: src/services/examResultFormatter.js (formatExamForList + internal stats)
- * Pure functions over plain objects — no mocks needed.
+ * Pure functions over plain objects - no mocks needed.
  */
 const { formatExamForList, EXAM_LIST_INCLUDE } = require('../../src/services/examResultFormatter');
 
@@ -45,7 +45,7 @@ describe('EXAM_LIST_INCLUDE', () => {
 
 // ─── computeStats (via formatExamForList) ─────────────────────────────────────
 
-describe('formatExamForList — statistics', () => {
+describe('formatExamForList - statistics', () => {
   test('WB-RF-02: aggregates highest/lowest/average over scored participants', () => {
     const exam = makeExam([makeParticipant(80), makeParticipant(60), makeParticipant(100)]);
     const out = formatExamForList(exam);
@@ -83,7 +83,7 @@ describe('formatExamForList — statistics', () => {
 
 // ─── participant projection ───────────────────────────────────────────────────
 
-describe('formatExamForList — participant_results', () => {
+describe('formatExamForList - participant_results', () => {
   test('WB-RF-06: scored participant → final_score rounded, submit_date surfaced', () => {
     const out = formatExamForList(makeExam([makeParticipant(77.777)]));
     expect(out.participant_results[0]).toMatchObject({ final_score: 77.78, submit_date: 'd' });
@@ -98,7 +98,7 @@ describe('formatExamForList — participant_results', () => {
 
 // ─── archived vs active shape ─────────────────────────────────────────────────
 
-describe('formatExamForList — shape variants', () => {
+describe('formatExamForList - shape variants', () => {
   test('WB-RF-08: active list (default) → includes duration_minutes + exam_status, not teacher_submitted_at', () => {
     const out = formatExamForList(makeExam([makeParticipant(80)]));
     expect(out.duration_minutes).toBe(90);

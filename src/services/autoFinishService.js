@@ -13,7 +13,7 @@ const checkAndFinishExpiredSessions = async () => {
     const now = new Date();
 
     // Only fetch sessions whose exam has ended OR whose individual timer has expired.
-    // Blocked participants are paused — their timer doesn't tick. They stay in
+    // Blocked participants are paused - their timer doesn't tick. They stay in
     // IN_PROGRESS+is_blocked until an admin/teacher unblocks them (or the next
     // scheduler tick after unblock catches them via the normal expiry path).
     const activeSessions = await prisma.examParticipant.findMany({

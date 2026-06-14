@@ -160,8 +160,8 @@ const getMyResults = asyncHandler(async (req, res) => {
   });
 
   // Hide final_score based on exam status conditions:
-  // 1. Exam deadline hasn't passed yet — students can't see scores
-  // 2. Essay exams that haven't been fully graded — score is preliminary
+  // 1. Exam deadline hasn't passed yet - students can't see scores
+  // 2. Essay exams that haven't been fully graded - score is preliminary
   const sanitizedResults = allResults.map(result => {
     const examEndDate = new Date(result.exam_participant?.exam?.end_date);
     const examNotEnded = examEndDate > now;

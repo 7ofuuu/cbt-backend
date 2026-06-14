@@ -1,8 +1,8 @@
 /**
  * White Box Test: Subject Access Service
- * WB-7 — SB-70
+ * WB-7 - SB-70
  * Target: src/services/subjectAccessService.js
- * No mocks needed — pure functions operating on plain objects.
+ * No mocks needed - pure functions operating on plain objects.
  */
 const {
   isCoordinator,
