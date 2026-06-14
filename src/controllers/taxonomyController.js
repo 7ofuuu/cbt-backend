@@ -58,10 +58,28 @@ const getTaxonomy = asyncHandler(async (req, res) => {
 const createSubject = asyncHandler(async (req, res) => {
   const { name, color, sort_order } = req.body;
   if (!name || !name.trim()) throw new AppError('Nama mata pelajaran wajib diisi', 400);
+  const trimmedName = name.trim();
+
+  // A soft-deleted row still holds the unique name, so a plain create would
+  // fail. If a matching row exists, revive it when inactive; otherwise it's a
+  // genuine duplicate.
+  const existing = await prisma.subject.findUnique({ where: { name: trimmedName } });
+  if (existing) {
+    if (existing.is_active) throw new AppError('Mata pelajaran sudah ada', 409);
+    const revived = await prisma.subject.update({
+      where: { subject_id: existing.subject_id },
+      data: {
+        is_active: true,
+        color: color?.trim() || null,
+        sort_order: Number.isInteger(sort_order) ? sort_order : 0,
+      },
+    });
+    return res.status(200).json({ subject: revived, revived: true });
+  }
 
   const subject = await prisma.subject.create({
     data: {
-      name: name.trim(),
+      name: trimmedName,
       color: color?.trim() || null,
       sort_order: Number.isInteger(sort_order) ? sort_order : 0,
     },
@@ -128,10 +146,26 @@ const createGradeLevel = asyncHandler(async (req, res) => {
   const { value, label, sort_order } = req.body;
   if (!value || !value.trim()) throw new AppError('Kode tingkat wajib diisi', 400);
   if (!label || !label.trim()) throw new AppError('Label tingkat wajib diisi', 400);
+  const trimmedValue = value.trim();
+
+  // Revive a soft-deleted row that still holds this unique value.
+  const existing = await prisma.gradeLevel.findUnique({ where: { value: trimmedValue } });
+  if (existing) {
+    if (existing.is_active) throw new AppError('Tingkat sudah ada', 409);
+    const revived = await prisma.gradeLevel.update({
+      where: { grade_level_id: existing.grade_level_id },
+      data: {
+        is_active: true,
+        label: label.trim(),
+        sort_order: Number.isInteger(sort_order) ? sort_order : 0,
+      },
+    });
+    return res.status(200).json({ grade_level: revived, revived: true });
+  }
 
   const gl = await prisma.gradeLevel.create({
     data: {
-      value: value.trim(),
+      value: trimmedValue,
       label: label.trim(),
       sort_order: Number.isInteger(sort_order) ? sort_order : 0,
     },
@@ -194,10 +228,26 @@ const createMajor = asyncHandler(async (req, res) => {
   const { value, label, sort_order } = req.body;
   if (!value || !value.trim()) throw new AppError('Kode jurusan wajib diisi', 400);
   if (!label || !label.trim()) throw new AppError('Label jurusan wajib diisi', 400);
+  const trimmedValue = value.trim();
+
+  // Revive a soft-deleted row that still holds this unique value.
+  const existing = await prisma.major.findUnique({ where: { value: trimmedValue } });
+  if (existing) {
+    if (existing.is_active) throw new AppError('Jurusan sudah ada', 409);
+    const revived = await prisma.major.update({
+      where: { major_id: existing.major_id },
+      data: {
+        is_active: true,
+        label: label.trim(),
+        sort_order: Number.isInteger(sort_order) ? sort_order : 0,
+      },
+    });
+    return res.status(200).json({ major: revived, revived: true });
+  }
 
   const major = await prisma.major.create({
     data: {
-      value: value.trim(),
+      value: trimmedValue,
       label: label.trim(),
       sort_order: Number.isInteger(sort_order) ? sort_order : 0,
     },
