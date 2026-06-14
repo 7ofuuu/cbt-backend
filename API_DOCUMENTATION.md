@@ -1,4 +1,4 @@
-# CBT Backend — Complete API Documentation
+# CBT Backend - Complete API Documentation
 
 **77 endpoints** covering authentication, question management, exam administration, student exam operations, user management, activity monitoring, results grading, and analytics.
 
@@ -59,7 +59,7 @@ Authorization: Bearer <token>
 | Taxonomy | 10 | No/Yes (Admin) | All/Admin |
 | Upload | 2 | Yes (Admin/Teacher) | Admin/Teachers |
 | Misc | 1 | No | All |
-| **TOTAL** | **93** | — | — |
+| **TOTAL** | **93** | - | - |
 
 ---
 
@@ -77,7 +77,7 @@ All endpoints (except auth) require a JWT token in the header:
 Authorization: Bearer <token>
 ```
 
-JWT payload: `{ id, role, is_super_admin }` — expires in 24 hours.
+JWT payload: `{ id, role, is_super_admin }` - expires in 24 hours.
 
 ---
 
@@ -85,7 +85,7 @@ JWT payload: `{ id, role, is_super_admin }` — expires in 24 hours.
 
 ### POST `/api/auth/register`
 
-Register a new user. **Admin-only** — requires authentication.
+Register a new user. **Admin-only** - requires authentication.
 
 **Middleware:** `verifyToken`, `checkRole('admin')`, `validateRegister`
 
@@ -141,13 +141,13 @@ Authenticate and receive a JWT token.
 }
 ```
 
-**Error Responses:** `401` Invalid credentials (same message for both wrong username and wrong password — timing-attack mitigation) · `403` Account deactivated
+**Error Responses:** `401` Invalid credentials (same message for both wrong username and wrong password - timing-attack mitigation) · `403` Account deactivated
 
 ---
 
 ### POST `/api/auth/logout`
 
-Log out the authenticated user. Stateless — clears session on client side. Logs the logout event.
+Log out the authenticated user. Stateless - clears session on client side. Logs the logout event.
 
 **Middleware:** `verifyToken`
 
@@ -201,7 +201,7 @@ Update the authenticated user's profile.
 }
 ```
 
-> Students can only update `full_name` and `nisn` — fields like `classroom`, `grade_level`, `major` are admin-managed. Teachers can update `full_name` and `nip`. Admins can only update `full_name`.
+> Students can only update `full_name` and `nisn` - fields like `classroom`, `grade_level`, `major` are admin-managed. Teachers can update `full_name` and `nip`. Admins can only update `full_name`.
 
 **Response (200):**
 
@@ -247,7 +247,7 @@ Change password for the authenticated user.
 
 ---
 
-## 2. Question Bank & Questions (`/api/questions`) — Teacher Only
+## 2. Question Bank & Questions (`/api/questions`) - Teacher Only
 
 All routes require `verifyToken` + `checkRole('teacher')`.
 
@@ -424,7 +424,7 @@ Assign all questions from a bank to an exam.
 
 ---
 
-## 3. Exams (`/api/exams`) — Teacher Only
+## 3. Exams (`/api/exams`) - Teacher Only
 
 All routes require `verifyToken` + `checkRole('teacher')`.
 
@@ -447,7 +447,7 @@ Create an exam. Students matching `grade_level` + `major` are **automatically as
 }
 ```
 
-> **Dual Timer System:** `end_date` is the global hard deadline — every participant must finish by this time. `duration_minutes` is the per-student timer — when a student starts, their effective deadline is `min(start_time + duration_minutes, end_date)`. Both fields are actively used for time enforcement.
+> **Dual Timer System:** `end_date` is the global hard deadline - every participant must finish by this time. `duration_minutes` is the per-student timer - when a student starts, their effective deadline is `min(start_time + duration_minutes, end_date)`. Both fields are actively used for time enforcement.
 
 **Response (201):**
 
@@ -582,7 +582,7 @@ Clear NOT_STARTED participants and re-assign students matching new grade/major c
 { "exam_id": 1, "grade_level": "XII", "major": "IPA" }
 ```
 
-> `major` is optional. Only participants with status `NOT_STARTED` are removed — active/completed participants are preserved.
+> `major` is optional. Only participants with status `NOT_STARTED` are removed - active/completed participants are preserved.
 
 **Response (200):**
 
@@ -620,7 +620,7 @@ Update score weights for multiple questions.
 
 ---
 
-## 4. Student Exam (`/api/students`) — Student Only
+## 4. Student Exam (`/api/students`) - Student Only
 
 All routes require `verifyToken` + `checkRole('student')`.
 
@@ -660,7 +660,7 @@ Get exams assigned to the authenticated student (only `SCHEDULED` and `ONGOING` 
 
 ### GET `/api/students/exams/:examId/prefetch`
 
-Download the **encrypted exam package** (the "sealed envelope") for offline-resilient start. Available from **H-1** (24 hours before `start_date`); before that it returns `403`. The package contains the questions **without answer keys** and is encrypted with a key derived from the per-exam access password — it stays opaque on the device until the student enters that password at start. This endpoint does **not** start the session.
+Download the **encrypted exam package** (the "sealed envelope") for offline-resilient start. Available from **H-1** (24 hours before `start_date`); before that it returns `403`. The package contains the questions **without answer keys** and is encrypted with a key derived from the per-exam access password - it stays opaque on the device until the student enters that password at start. This endpoint does **not** start the session.
 
 **Response (200):**
 
@@ -698,7 +698,7 @@ Download the **encrypted exam package** (the "sealed envelope") for offline-resi
 
 ### POST `/api/students/exams/start`
 
-Begin (or resume) an exam **session**. Sets status to `IN_PROGRESS` and records `start_time`. Returns session state **only** — the question list comes from the decrypted `prefetch` package, not from here.
+Begin (or resume) an exam **session**. Sets status to `IN_PROGRESS` and records `start_time`. Returns session state **only** - the question list comes from the decrypted `prefetch` package, not from here.
 
 **Request Body:**
 
@@ -728,7 +728,7 @@ Begin (or resume) an exam **session**. Sets status to `IN_PROGRESS` and records 
 }
 ```
 
-> **Note:** Questions are **no longer returned here** — fetch and decrypt them via `prefetch`. `existing_answers` contains previously saved answers (useful when resuming). `remaining_seconds` is the countdown to `min(start_time + duration_minutes, end_date)`.
+> **Note:** Questions are **no longer returned here** - fetch and decrypt them via `prefetch`. `existing_answers` contains previously saved answers (useful when resuming). `remaining_seconds` is the countdown to `min(start_time + duration_minutes, end_date)`.
 
 **Error Responses:** `403` Blocked (needs unlock code) · `400` Already finished / Not started yet / Past end_date
 
@@ -814,9 +814,9 @@ Student self-reports an app lifecycle violation (e.g., leaving the app during ex
 
 ---
 
-## 5. User Management (`/api/users`) — Admin & Teacher
+## 5. User Management (`/api/users`) - Admin & Teacher
 
-### GET `/api/users/` — Admin
+### GET `/api/users/` - Admin
 
 List all users with pagination and search.
 
@@ -846,25 +846,25 @@ List all users with pagination and search.
 
 ---
 
-### GET `/api/users/admins` — Admin
+### GET `/api/users/admins` - Admin
 
 List all admin users with pagination. Query: `limit`, `page`, `search`.
 
 ---
 
-### GET `/api/users/teachers` — Admin
+### GET `/api/users/teachers` - Admin
 
 List all teacher users with pagination. Query: `limit`, `page`, `search`.
 
 ---
 
-### GET `/api/users/students` — Admin
+### GET `/api/users/students` - Admin
 
 List all student users with pagination and search. Query: `limit`, `page`, `search`.
 
 ---
 
-### GET `/api/users/count` — Admin
+### GET `/api/users/count` - Admin
 
 Count users by role.
 
@@ -876,7 +876,7 @@ Count users by role.
 
 ---
 
-### POST `/api/users/` — Admin
+### POST `/api/users/` - Admin
 
 Create a new user.
 
@@ -898,7 +898,7 @@ Create a new user.
 
 ---
 
-### POST `/api/users/batch` — Admin
+### POST `/api/users/batch` - Admin
 
 Batch import users.
 
@@ -926,17 +926,17 @@ Batch import users.
 
 ---
 
-### POST `/api/users/batch-delete` — Admin
+### POST `/api/users/batch-delete` - Admin
 
 Batch delete users. Two modes: by explicit user IDs, or by grade/major/classroom filter (for graduating classes). Self and Super Admin are always excluded.
 
-**Request Body (Mode 1 — by IDs):**
+**Request Body (Mode 1 - by IDs):**
 
 ```json
 { "user_ids": [10, 11, 12] }
 ```
 
-**Request Body (Mode 2 — by filter):**
+**Request Body (Mode 2 - by filter):**
 
 ```json
 { "grade_level": "XII", "major": "IPA", "classroom": "XII-IPA-1" }
@@ -957,13 +957,13 @@ Batch delete users. Two modes: by explicit user IDs, or by grade/major/classroom
 
 ---
 
-### GET `/api/users/:id` — Admin
+### GET `/api/users/:id` - Admin
 
 Get detailed user info.
 
 ---
 
-### PUT `/api/users/:id` — Admin
+### PUT `/api/users/:id` - Admin
 
 Update a user. Super Admin can only be edited by themselves. Fields are **flat** (no nested `profile` object).
 
@@ -986,7 +986,7 @@ Update a user. Super Admin can only be edited by themselves. Fields are **flat**
 
 ---
 
-### PUT `/api/users/:id/role` — Admin
+### PUT `/api/users/:id/role` - Admin
 
 Change a user's role. Creates new role-specific profile and deletes old one. Super Admin role cannot be changed.
 
@@ -998,19 +998,19 @@ Change a user's role. Creates new role-specific profile and deletes old one. Sup
 
 ---
 
-### PATCH `/api/users/:id/status` — Admin
+### PATCH `/api/users/:id/status` - Admin
 
 Toggle user active/inactive. Super Admin status cannot be toggled.
 
 ---
 
-### DELETE `/api/users/:id` — Admin
+### DELETE `/api/users/:id` - Admin
 
 Delete a user. Super Admin cannot be deleted.
 
 ---
 
-### POST `/api/users/score` — Teacher
+### POST `/api/users/score` - Teacher
 
 Grade an essay answer manually.
 
@@ -1020,11 +1020,11 @@ Grade an essay answer manually.
 { "answer_id": 15, "manual_score": 85 }
 ```
 
-> Score must be 0–100. Teacher ownership of the exam is verified.
+> Score must be 0-100. Teacher ownership of the exam is verified.
 
 ---
 
-### POST `/api/users/finalize` — Teacher
+### POST `/api/users/finalize` - Teacher
 
 Finalize scoring for a participant. Recalculates total: MC uses `is_correct`, essay uses `manual_score`. Sets status to `GRADED`.
 
@@ -1052,7 +1052,7 @@ Finalize scoring for a participant. Recalculates total: MC uses `is_correct`, es
 
 ---
 
-## 6. Activity Monitoring (`/api/admin/activities`) — Admin Only
+## 6. Activity Monitoring (`/api/admin/activities`) - Admin Only
 
 All routes require `verifyToken` + `checkRole('admin')`.
 
@@ -1088,7 +1088,7 @@ Get participants for a specific exam.
 
 **Query Parameters:** `major`, `classroom`, `status` ("BLOCKED", "ON_PROGRESS", "SUBMITTED", or "all")
 
-The response `data.exam` object includes **`access_password`** — the per-exam password students enter to decrypt the pre-downloaded package. It is generated lazily once the exam enters the H-1 window (`null` before that) and is intended to be announced to students at start time. Admin-only.
+The response `data.exam` object includes **`access_password`** - the per-exam password students enter to decrypt the pre-downloaded package. It is generated lazily once the exam enters the H-1 window (`null` before that) and is intended to be announced to students at start time. Admin-only.
 
 ---
 
@@ -1134,9 +1134,9 @@ Unblock a participant using the unlock code.
 
 ---
 
-## 7. Exam Results (`/api/exam-results`) — Student & Teacher
+## 7. Exam Results (`/api/exam-results`) - Student & Teacher
 
-### GET `/api/exam-results/my-results` — Student
+### GET `/api/exam-results/my-results` - Student
 
 Get the authenticated student's exam results.
 
@@ -1159,7 +1159,7 @@ Get the authenticated student's exam results.
 
 ---
 
-### GET `/api/exam-results/completed-exams` — Teacher
+### GET `/api/exam-results/completed-exams` - Teacher
 
 Get all completed exams (status `ENDED`) with score statistics. **All teachers see all ended exams** (no ownership filter).
 
@@ -1208,7 +1208,7 @@ Get all completed exams (status `ENDED`) with score statistics. **All teachers s
 
 ---
 
-### GET `/api/exam-results/exam/:exam_id` — Teacher
+### GET `/api/exam-results/exam/:exam_id` - Teacher
 
 Get results for all participants in an exam, ordered by score descending. **All teachers can view any exam** (no ownership check).
 
@@ -1234,7 +1234,7 @@ Get results for all participants in an exam, ordered by score descending. **All 
 
 ---
 
-### GET `/api/exam-results/participant/:exam_participant_id` — Teacher
+### GET `/api/exam-results/participant/:exam_participant_id` - Teacher
 
 Get result for a single participant. **All teachers can view** (no ownership check).
 
@@ -1257,11 +1257,11 @@ Get result for a single participant. **All teachers can view** (no ownership che
 
 ---
 
-### GET `/api/exam-results/detail/:exam_participant_id` — Teacher
+### GET `/api/exam-results/detail/:exam_participant_id` - Teacher
 
 Get detailed review: each question mapped to its answer, with `is_correct` and `score_obtained`. Returns `exam_status` from participant record. If no `ExamResult` exists yet (ungraded), falls back to `ExamParticipant` data and returns `exam_result: null`.
 
-**Response (200) — with result:**
+**Response (200) - with result:**
 
 ```json
 {
@@ -1286,7 +1286,7 @@ Get detailed review: each question mapped to its answer, with `is_correct` and `
 }
 ```
 
-**Response (200) — without result (ungraded):**
+**Response (200) - without result (ungraded):**
 
 ```json
 {
@@ -1300,7 +1300,7 @@ Get detailed review: each question mapped to its answer, with `is_correct` and `
 
 ---
 
-### POST `/api/exam-results/calculate` — Teacher
+### POST `/api/exam-results/calculate` - Teacher
 
 Calculate and save exam result. Auto-grades using `is_correct` for MC and `manual_score` for essay. Updates participant status to `GRADED` (all graded) or `COMPLETED` (has ungraded essay).
 
@@ -1326,7 +1326,7 @@ Calculate and save exam result. Auto-grades using `is_correct` for MC and `manua
 
 ---
 
-### PUT `/api/exam-results/manual-score` — Teacher
+### PUT `/api/exam-results/manual-score` - Teacher
 
 Update manual score for an essay answer. **Automatically recalculates** `final_score` and updates participant status after saving.
 
@@ -1353,9 +1353,9 @@ Update manual score for an essay answer. **Automatically recalculates** `final_s
 
 ---
 
-### POST `/api/exam-results/:examId/submit` — Teacher
+### POST `/api/exam-results/:examId/submit` - Teacher
 
-Submit a completed exam to the archive. Used by the teacher Hasil Ujian page once grading is finalised — archived exams move from the **Aktif** tab to the **Arsip** tab.
+Submit a completed exam to the archive. Used by the teacher Hasil Ujian page once grading is finalised - archived exams move from the **Aktif** tab to the **Arsip** tab.
 
 **Middleware:** `verifyToken`, `checkRole('teacher')`, `resolveTeacher`
 
@@ -1370,14 +1370,14 @@ Submit a completed exam to the archive. Used by the teacher Hasil Ujian page onc
 ```
 
 **Errors:**
-- `400` — exam not yet `ENDED` or already archived
-- `403` — teacher cannot access this subject
+- `400` - exam not yet `ENDED` or already archived
+- `403` - teacher cannot access this subject
 
 Internally sets `Exam.teacher_submitted_at = now()`, which excludes the exam from `GET /completed-exams` and includes it in `GET /archived-exams`.
 
 ---
 
-### GET `/api/exam-results/archived-exams` — Teacher
+### GET `/api/exam-results/archived-exams` - Teacher
 
 List archived exams (those submitted via the endpoint above). Mirrors `GET /completed-exams` but filters on `teacher_submitted_at IS NOT NULL` and orders by archive timestamp descending.
 
@@ -1388,7 +1388,7 @@ List archived exams (those submitted via the endpoint above). Mirrors `GET /comp
 
 ---
 
-## 8. Activity Logs (`/api/activity-logs`) — Admin & Teacher
+## 8. Activity Logs (`/api/activity-logs`) - Admin & Teacher
 
 All routes require `verifyToken` + `checkRole(['admin', 'teacher'])`.
 
@@ -1496,7 +1496,7 @@ Update school profile. Admin only.
 
 ---
 
-## 10. Analytics (`/api/analytics`) — Teacher Only
+## 10. Analytics (`/api/analytics`) - Teacher Only
 
 All routes require `verifyToken` + `checkRole('teacher')` + `resolveTeacher`.
 
@@ -1587,10 +1587,10 @@ Deletes are **soft** (`is_active = false`). Historical exam/student/teacher rows
 
 ### GET `/api/taxonomy`
 
-Combined fetch of all three taxonomies in one call. **Public** — no auth required.
+Combined fetch of all three taxonomies in one call. **Public** - no auth required.
 
 **Query Parameters:**
-- `include_inactive` (optional) — set to `true` to receive soft-deleted rows (used by the master-data UI)
+- `include_inactive` (optional) - set to `true` to receive soft-deleted rows (used by the master-data UI)
 
 **Response (200):**
 
@@ -1610,7 +1610,7 @@ Combined fetch of all three taxonomies in one call. **Public** — no auth requi
 
 ---
 
-### POST `/api/taxonomy/subjects` — Admin
+### POST `/api/taxonomy/subjects` - Admin
 
 **Request Body:**
 
@@ -1622,7 +1622,7 @@ Combined fetch of all three taxonomies in one call. **Public** — no auth requi
 
 ---
 
-### PUT `/api/taxonomy/subjects/:id` — Admin
+### PUT `/api/taxonomy/subjects/:id` - Admin
 
 Supports an opt-in `cascade_rename: true` flag that rewrites the subject string snapshot wherever it appears on historical `Exam`, `QuestionBank`, `Question`, and `Teacher` rows. Returns a `cascade` summary so the dashboard can surface the affected count in a toast.
 
@@ -1645,13 +1645,13 @@ When `cascade_rename` is omitted or `false`, `cascade` is `null` and only future
 
 ---
 
-### DELETE `/api/taxonomy/subjects/:id` — Admin
+### DELETE `/api/taxonomy/subjects/:id` - Admin
 
 Soft-deactivate (sets `is_active = false`).
 
 ---
 
-### POST `/api/taxonomy/grade-levels` — Admin
+### POST `/api/taxonomy/grade-levels` - Admin
 
 ```json
 { "value": "XIII", "label": "Kelas 13", "sort_order": 3 }
@@ -1661,19 +1661,19 @@ Soft-deactivate (sets `is_active = false`).
 
 ---
 
-### PUT `/api/taxonomy/grade-levels/:id` — Admin
+### PUT `/api/taxonomy/grade-levels/:id` - Admin
 
 Cascade targets when `cascade_rename: true`: `Exam`, `QuestionBank`, `Question`, `Student`.
 
 ---
 
-### DELETE `/api/taxonomy/grade-levels/:id` — Admin
+### DELETE `/api/taxonomy/grade-levels/:id` - Admin
 
 Soft-deactivate.
 
 ---
 
-### POST `/api/taxonomy/majors` — Admin
+### POST `/api/taxonomy/majors` - Admin
 
 ```json
 { "value": "MIPA", "label": "MIPA", "sort_order": 0 }
@@ -1681,13 +1681,13 @@ Soft-deactivate.
 
 ---
 
-### PUT `/api/taxonomy/majors/:id` — Admin
+### PUT `/api/taxonomy/majors/:id` - Admin
 
 Cascade targets when `cascade_rename: true`: `Exam`, `QuestionBank`, `Question`, `Student`.
 
 ---
 
-### DELETE `/api/taxonomy/majors/:id` — Admin
+### DELETE `/api/taxonomy/majors/:id` - Admin
 
 Soft-deactivate.
 
@@ -1701,13 +1701,13 @@ Image upload pipeline backed by `multer` disk storage. Files land under `cbt-bac
 - Max size: **5 MB** per file
 - Allowed MIME: `image/png`, `image/jpeg`, `image/webp`, `image/gif`
 
-### POST `/api/upload/logo` — Admin
+### POST `/api/upload/logo` - Admin
 
 Upload the school logo. Mounted before the school-profile PUT so the admin can upload, copy the returned URL into `logo_url`, and save.
 
 **Headers:** `Content-Type: multipart/form-data`
 
-**Form field:** `file` — the image binary
+**Form field:** `file` - the image binary
 
 **Response (201):**
 
@@ -1724,15 +1724,15 @@ The returned `url` is **path-relative** (no host) so it stays correct on localho
 
 ---
 
-### POST `/api/upload/question-image` — Teacher or Admin
+### POST `/api/upload/question-image` - Teacher or Admin
 
 Upload an attachment for a question. Used by the teacher question authoring page; the returned URL is saved on `Question.question_image`.
 
 Same request/response shape as logo upload, but files land under `/uploads/questions/`.
 
 **Error responses:**
-- `400` — wrong MIME type (`Format file tidak didukung`)
-- `400` — over 5 MB (multer `LIMIT_FILE_SIZE`)
+- `400` - wrong MIME type (`Format file tidak didukung`)
+- `400` - over 5 MB (multer `LIMIT_FILE_SIZE`)
 
 ---
 
@@ -1801,7 +1801,7 @@ All errors follow:
 | # | Method | Route | Auth |
 |---|--------|-------|------|
 | 1 | POST | `/api/auth/register` | admin |
-| 2 | POST | `/api/auth/login` | — |
+| 2 | POST | `/api/auth/login` | - |
 | 3 | POST | `/api/auth/logout` | token |
 | 4 | GET | `/api/auth/me` | token |
 | 5 | PATCH | `/api/auth/profile` | token |
@@ -1871,7 +1871,7 @@ All errors follow:
 | 69 | GET | `/api/activity-logs/exam-participant/:examParticipantId` | admin/teacher |
 | 70 | GET | `/api/activity-logs/type/:activityType` | admin/teacher |
 | 71 | PATCH | `/api/auth/change-password` | token |
-| 72 | GET | `/api/school-profile/` | — |
+| 72 | GET | `/api/school-profile/` | - |
 | 73 | PUT | `/api/school-profile/` | admin |
 | 74 | GET | `/api/analytics/question-stats` | teacher |
 | 75 | GET | `/api/analytics/dashboard-summary` | teacher |
@@ -1879,7 +1879,7 @@ All errors follow:
 | 77 | GET | `/api/analytics/coordinator-audit` | teacher (coordinator) |
 | 78 | POST | `/api/exam-results/:examId/submit` | teacher |
 | 79 | GET | `/api/exam-results/archived-exams` | teacher |
-| 80 | GET | `/api/taxonomy` | — |
+| 80 | GET | `/api/taxonomy` | - |
 | 81 | POST | `/api/taxonomy/subjects` | admin |
 | 82 | PUT | `/api/taxonomy/subjects/:id` | admin |
 | 83 | DELETE | `/api/taxonomy/subjects/:id` | admin |
@@ -1891,7 +1891,7 @@ All errors follow:
 | 89 | DELETE | `/api/taxonomy/majors/:id` | admin |
 | 90 | POST | `/api/upload/logo` | admin |
 | 91 | POST | `/api/upload/question-image` | admin/teacher |
-| 92 | GET | `/api/time` | — |
+| 92 | GET | `/api/time` | - |
 
 
 ---
@@ -1913,7 +1913,7 @@ All errors follow:
 3. **Add Questions to Bank** (POST `/api/questions/` x N)
 4. **Create Exam** (POST `/api/exams/`)
 5. **Assign Questions** (POST `/api/exams/assign-bank` or POST `/api/exams/assign-question`)
-6. **Assign Students** (POST `/api/exams/assign-student` — auto-happens on creation)
+6. **Assign Students** (POST `/api/exams/assign-student` - auto-happens on creation)
 7. **Grade Essays** (POST `/api/users/score`)
 8. **Finalize Scores** (POST `/api/users/finalize`)
 
@@ -1945,7 +1945,7 @@ Each exam has **two time limits**:
 
 1. **Global Deadline** (`exam.end_date`)
    - Hard cutoff for ALL participants
-   - No exceptions — all must finish by this time
+   - No exceptions - all must finish by this time
    - Server auto-finishes at deadline
 
 2. **Per-Student Duration** (`exam.duration_minutes`)

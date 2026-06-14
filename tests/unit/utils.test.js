@@ -180,7 +180,7 @@ describe('encryptPayload', () => {
     expect(typeof env.ciphertext).toBe('string');
   });
 
-  test('WB-EP-02: round-trips — decrypting with same password recovers payload', () => {
+  test('WB-EP-02: round-trips - decrypting with same password recovers payload', () => {
     const payload = { questions: [{ id: 1, text: 'Soal' }], meta: 'x' };
     const env = encryptPayload(payload, 'SECRET1234');
     expect(decryptEnvelope(env, 'SECRET1234')).toEqual(payload);

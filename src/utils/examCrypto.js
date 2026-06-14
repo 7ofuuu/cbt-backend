@@ -1,5 +1,5 @@
 /**
- * Exam payload encryption — the "sealed envelope" for pre-downloaded exams.
+ * Exam payload encryption - the "sealed envelope" for pre-downloaded exams.
  *
  * The student app may download an exam package up to H-1, but it must not be
  * readable until the proctor announces the per-exam password at start time.

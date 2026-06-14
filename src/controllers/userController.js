@@ -55,7 +55,7 @@ const listUsers = (roleFilter = null) =>
         { student: { full_name: { contains: search } } },
       ];
     }
-    // status filter — used by the admin user-list pages to show only active
+    // status filter - used by the admin user-list pages to show only active
     // or only inactive accounts (and to power the bulk-delete-inactive flow).
     if (status === 'active') where.is_active = true;
     else if (status === 'inactive') where.is_active = false;
@@ -470,7 +470,7 @@ const batchDeleteUsers = asyncHandler(async (req, res) => {
   const { user_ids, grade_level, major, classroom } = req.body;
 
   // Mode 1: Delete by explicit user IDs
-  // Mode 2: Delete by filter (grade_level, major, classroom) — for graduating classes
+  // Mode 2: Delete by filter (grade_level, major, classroom) - for graduating classes
   let targetIds = [];
 
   if (user_ids && Array.isArray(user_ids) && user_ids.length > 0) {

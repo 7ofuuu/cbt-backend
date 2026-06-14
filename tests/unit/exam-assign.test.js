@@ -1,6 +1,6 @@
 /**
  * White Box Test: Exam Student Assignment
- * WB-5 — SB-59
+ * WB-5 - SB-59
  * Target: src/controllers/examController.js → assignStudentToExam, reassignStudents
  */
 jest.mock('../../src/config/db');

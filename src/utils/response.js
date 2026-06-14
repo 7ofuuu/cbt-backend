@@ -1,5 +1,5 @@
 /**
- * Response helpers — opt-in shape for new endpoints.
+ * Response helpers - opt-in shape for new endpoints.
  *
  * Existing endpoints return mixed shapes (`{ data }`, `{ subject }`,
  * `{ message, data }`, …) and the dashboard depends on those literal keys,

@@ -1,6 +1,6 @@
 /**
  * White Box Test: Score Service
- * WB-6 — SB-60 & SB-61
+ * WB-6 - SB-60 & SB-61
  * Target: src/services/scoreService.js
  */
 jest.mock('../../src/config/db');
@@ -41,7 +41,7 @@ const makeMCAnswer = (question_id, selectedOptionIds, allOptions) => ({
 
 // ─── calculateScore (pure function) ─────────────────────────────────────────
 
-describe('calculateScore — SINGLE_CHOICE', () => {
+describe('calculateScore - SINGLE_CHOICE', () => {
   test('WB-G1: correct answer adds full score_weight', () => {
     const q = [makeExamQuestion(1, 10)];
     const a = [makeSingleAnswer(1, true)];
@@ -58,7 +58,7 @@ describe('calculateScore — SINGLE_CHOICE', () => {
     expect(result.finalScore).toBe(0);
   });
 
-  test('WB-G11: answer not found for question — skip (no score added)', () => {
+  test('WB-G11: answer not found for question - skip (no score added)', () => {
     const q = [makeExamQuestion(1, 10), makeExamQuestion(2, 10)];
     const a = [makeSingleAnswer(1, true)]; // no answer for question 2
     const result = calculateScore(q, a);
@@ -68,7 +68,7 @@ describe('calculateScore — SINGLE_CHOICE', () => {
   });
 });
 
-describe('calculateScore — ESSAY', () => {
+describe('calculateScore - ESSAY', () => {
   test('WB-G7: manual_score = null → allEssayGraded = false, hasEssay = true', () => {
     const q = [makeExamQuestion(1, 20)];
     const a = [makeEssayAnswer(1, null)];
@@ -104,7 +104,7 @@ describe('calculateScore — ESSAY', () => {
   });
 });
 
-describe('calculateScore — MULTIPLE_CHOICE', () => {
+describe('calculateScore - MULTIPLE_CHOICE', () => {
   const options = [
     { option_id: 1, is_correct: true },
     { option_id: 2, is_correct: true },
@@ -158,7 +158,7 @@ describe('calculateScore — MULTIPLE_CHOICE', () => {
   });
 });
 
-describe('calculateScore — Mixed & Edge Cases', () => {
+describe('calculateScore - Mixed & Edge Cases', () => {
   test('WB-G10: empty examQuestions → finalScore = 0', () => {
     const result = calculateScore([], []);
     expect(result.finalScore).toBe(0);
