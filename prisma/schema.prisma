@@ -271,7 +271,7 @@ enum QuestionType {
 // ----------------------------------------------
 // These tables drive admin-managed dropdowns and filters across the dashboard
 // (Subject, GradeLevel, Major). String columns on Exam/Question/Student etc.
-// stay as snapshots — they are not FK'd to these tables so renaming or
+// stay as snapshots - they are not FK'd to these tables so renaming or
 // deactivating a taxonomy row does not corrupt historical data. Deletion is
 // soft via is_active so old exams keep their labels.
 // ============================================
@@ -315,7 +315,7 @@ model Major {
 }
 
 // ============================================
-// SCHOOL PROFILE (singleton – only 1 row)
+// SCHOOL PROFILE (singleton - only 1 row)
 // ============================================
 model SchoolProfile {
   id               Int      @id @default(1)

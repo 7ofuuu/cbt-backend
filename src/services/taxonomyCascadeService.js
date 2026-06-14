@@ -1,12 +1,12 @@
 /**
- * Taxonomy cascade rename — propagates a renamed taxonomy value to the
+ * Taxonomy cascade rename - propagates a renamed taxonomy value to the
  * historical string snapshots that older exam/bank/question/student rows
  * carry. Three controller actions (subject, grade level, major) previously
  * spelled this out verbatim; this single helper now owns the pattern so
  * the controllers can describe *what* to rename without the boilerplate.
  *
  * `targets` lists the Prisma delegate plus the field name to update on it.
- * Pass only the tables that actually carry the snapshot for this taxonomy —
+ * Pass only the tables that actually carry the snapshot for this taxonomy -
  * subjects, for example, do not appear on the Student table.
  *
  * Returns a `{ <key>: count }` map so callers can surface a friendly

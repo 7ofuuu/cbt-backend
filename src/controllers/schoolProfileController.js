@@ -1,7 +1,7 @@
 /**
  * School Profile Controller
- * Singleton school profile — always row id = 1.
- * GET  /api/school-profile       → public (no auth) — used by headers, login, Flutter
+ * Singleton school profile - always row id = 1.
+ * GET  /api/school-profile       → public (no auth) - used by headers, login, Flutter
  * PUT  /api/school-profile       → admin only
  */
 const prisma = require('../config/db');

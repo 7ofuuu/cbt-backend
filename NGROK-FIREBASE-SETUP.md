@@ -3,7 +3,7 @@
 Tutorial self-host: **backend berjalan di laptop Anda (port 3000)** dan diekspos ke
 internet lewat ngrok, sehingga **dashboard (di Vercel)** dan **APK Flutter (Firebase
 App Distribution)** bisa menjangkaunya dari mana saja. Backend lokal (`localhost:3000`)
-tetap hidup normal saat ngrok berjalan — ngrok hanya membuka jalur internet tambahan.
+tetap hidup normal saat ngrok berjalan - ngrok hanya membuka jalur internet tambahan.
 
 ---
 
@@ -14,7 +14,7 @@ winget install ngrok.ngrok
 ngrok config add-authtoken <TOKEN_ANDA>   # dari https://dashboard.ngrok.com
 ```
 
-Authtoken disimpan global di komputer (`%LOCALAPPDATA%\ngrok\ngrok.yml`) — **tidak
+Authtoken disimpan global di komputer (`%LOCALAPPDATA%\ngrok\ngrok.yml`) - **tidak
 disimpan di repo ini**.
 
 **Static domain:** Klaim 1 static domain gratis di <https://dashboard.ngrok.com/domains>,
@@ -41,9 +41,9 @@ keduanya berjalan selama sistem dipakai.
 | **Backend CORS** | Origins dari `CORS_ORIGINS` | `ALLOW_NGROK_ORIGINS=true` + `ALLOW_VERCEL_ORIGINS=true` |
 
 Yang sudah ditangani di kode:
-- **Header `ngrok-skip-browser-warning`** — Axios kirim header ini agar XHR dapat JSON, bukan halaman HTML interstitial ngrok.
-- **CSP `connect-src`/`img-src`** di `next.config.mjs` — diturunkan dari `NEXT_PUBLIC_HOST_NGROK`, jadi pastikan env itu benar di Vercel.
-- **`trust proxy 1`** — backend baca IP asli client di balik proxy ngrok.
+- **Header `ngrok-skip-browser-warning`** - Axios kirim header ini agar XHR dapat JSON, bukan halaman HTML interstitial ngrok.
+- **CSP `connect-src`/`img-src`** di `next.config.mjs` - diturunkan dari `NEXT_PUBLIC_HOST_NGROK`, jadi pastikan env itu benar di Vercel.
+- **`trust proxy 1`** - backend baca IP asli client di balik proxy ngrok.
 
 > **Penting:** matikan `ALLOW_NGROK_ORIGINS` di environment production yang sebenarnya.
 
@@ -70,7 +70,7 @@ static const String _ngrokHost = "<static-domain>";
 
 ## 5. Firebase App Distribution
 
-Firebase **tidak meng-host backend** — hanya mendistribusikan APK ke tester.
+Firebase **tidak meng-host backend** - hanya mendistribusikan APK ke tester.
 Backend tetap lokal, diekspos lewat ngrok. Tidak perlu tambah SDK Firebase ke Flutter.
 
 **Info project Firebase:**

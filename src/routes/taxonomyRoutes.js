@@ -8,7 +8,7 @@ const {
   createMajor, updateMajor, deactivateMajor,
 } = require('../controllers/taxonomyController');
 
-// Public read — dashboard + Flutter populate dropdowns from this.
+// Public read - dashboard + Flutter populate dropdowns from this.
 // ?include_inactive=true returns soft-deleted rows (used by admin master-data UI).
 router.get('/', getTaxonomy);
 

@@ -1,5 +1,5 @@
 /**
- * Upload middleware — multer disk storage.
+ * Upload middleware - multer disk storage.
  *
  * Files land under `uploads/<bucket>/` with a timestamp-prefixed filename so
  * collisions are impossible without coordinating across requests. The route
@@ -15,7 +15,7 @@ const { AppError } = require('../utils/asyncHandler');
 
 const UPLOADS_ROOT = path.resolve(__dirname, '../../uploads');
 
-// Allowed image mime types — kept narrow for safety.
+// Allowed image mime types - kept narrow for safety.
 const ALLOWED_MIMES = new Set([
   'image/png',
   'image/jpeg',

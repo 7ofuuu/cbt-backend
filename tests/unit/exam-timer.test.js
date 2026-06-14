@@ -1,6 +1,6 @@
 /**
  * White Box Test: Exam Timer Logic (Dual Timer)
- * WB-3 — SB-57
+ * WB-3 - SB-57
  * Target: src/services/autoFinishService.js (dual timer filtering logic)
  */
 jest.mock('../../src/config/db');
