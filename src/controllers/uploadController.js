@@ -1,5 +1,5 @@
 /**
- * Upload Controller — turns a stored file into a public URL.
+ * Upload Controller - turns a stored file into a public URL.
  *
  * The route mounts the matching multer middleware before this controller
  * runs, so by the time we get here `req.file` always exists. We just need

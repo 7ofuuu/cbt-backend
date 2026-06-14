@@ -140,7 +140,7 @@ exports.getExamParticipants = asyncHandler(async (req, res) => {
     };
   });
 
-  // Exam access password for encrypted pre-download — visible to admin only,
+  // Exam access password for encrypted pre-download - visible to admin only,
   // lazily generated once the exam is within the H-1 window (null before that).
   const accessPassword = await ensureAccessPassword(exam);
 

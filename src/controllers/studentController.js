@@ -179,7 +179,7 @@ const startExam = asyncHandler(async (req, res) => {
   const effectiveEnd = examEndByDuration < end ? examEndByDuration : end;
   const remainingMs = Math.max(0, effectiveEnd.getTime() - now.getTime());
 
-  // Questions are no longer returned here — the client reads them from the
+  // Questions are no longer returned here - the client reads them from the
   // encrypted package downloaded via /prefetch and decrypted locally with the
   // exam password. This endpoint only owns the session state.
   const existingAnswers = await prisma.answer.findMany({

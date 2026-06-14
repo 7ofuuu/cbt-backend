@@ -1,6 +1,6 @@
 /**
  * Black Box Test: User Management
- * BB-2 — SB-64 & SB-65
+ * BB-2 - SB-64 & SB-65
  * Endpoints: /api/users (CRUD + batch)
  */
 jest.mock('../../src/config/db');

@@ -1,6 +1,6 @@
 /**
  * White Box Test: Auth Middleware
- * WB-2 — SB-56
+ * WB-2 - SB-56
  * Target: src/middlewares/validationMiddleware.js
  */
 jest.mock('../../src/config/db');

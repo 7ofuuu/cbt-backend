@@ -1,6 +1,6 @@
 /**
  * Black Box Test: Question Bank & Question CRUD
- * BB-3 — SB-66 & SB-67
+ * BB-3 - SB-66 & SB-67
  * Endpoints: /api/questions/bank, /api/questions
  */
 jest.mock('../../src/config/db');

@@ -1,6 +1,6 @@
 /**
  * White Box Test: Auto-Finish & Auto-Expire Schedulers
- * WB-4 — SB-58
+ * WB-4 - SB-58
  * Target: src/services/autoFinishService.js + src/services/autoExpireExamService.js
  */
 jest.mock('../../src/config/db');

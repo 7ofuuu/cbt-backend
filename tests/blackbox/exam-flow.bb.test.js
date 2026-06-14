@@ -1,6 +1,6 @@
 /**
  * Black Box Test: Exam Flow End-to-End
- * BB-4 — SB-68 & SB-69
+ * BB-4 - SB-68 & SB-69
  * MUST run with --runInBand (stateful sequential test)
  * Covers: create exam, assign students, start exam, submit answers, finish, view results, block/unblock
  */
@@ -179,7 +179,7 @@ describe('Step 4: Student starts exam', () => {
       .send({ exam_id: 42 });
 
     expect(res.status).toBe(200);
-    // Start now returns session state only — questions arrive via the
+    // Start now returns session state only - questions arrive via the
     // encrypted /prefetch package, not here.
     expect(res.body).toHaveProperty('exam_participant_id');
     expect(res.body).not.toHaveProperty('questions');
@@ -228,7 +228,7 @@ describe('Step 4: Student starts exam', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.data).toHaveProperty('encrypted');
     expect(res.body.data.encrypted).toHaveProperty('ciphertext');
-    // Answer keys must never reach the device — payload is encrypted, not plain.
+    // Answer keys must never reach the device - payload is encrypted, not plain.
     expect(JSON.stringify(res.body.data)).not.toContain('is_correct');
   });
 
@@ -349,7 +349,7 @@ describe('Step 7: Teacher views exam results', () => {
 
 // ─── Step 8: Admin blocks and unblocks participant ────────────────────────────
 
-describe('Step 8: Admin monitoring — block and unblock', () => {
+describe('Step 8: Admin monitoring - block and unblock', () => {
   test('BB-EF-09: POST /api/admin/activities/:id/block → 200', async () => {
     prisma.user.findUnique.mockResolvedValue(adminDbUser);
     prisma.examParticipant.findUnique.mockResolvedValue({
