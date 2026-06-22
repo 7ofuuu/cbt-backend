@@ -8,12 +8,17 @@ jest.mock('../../src/config/db');
 jest.mock('../../src/services/activityLogService', () => ({
   logFromRequest: jest.fn().mockResolvedValue(undefined),
 }));
+jest.mock('../../src/utils/uploadFs', () => ({
+  deletePublicUpload: jest.fn(),
+  resolveUploadPath: jest.fn(),
+}));
 
 const path = require('path');
 const prisma = require('../../src/config/db');
 const profileCtrl = require('../../src/controllers/schoolProfileController');
 const uploadCtrl = require('../../src/controllers/uploadController');
 const { UPLOADS_ROOT } = require('../../src/middlewares/uploadMiddleware');
+const { deletePublicUpload } = require('../../src/utils/uploadFs');
 
 const makeReqRes = (overrides = {}) => {
   const req = { body: {}, params: {}, query: {}, user: { id: 1 }, headers: {}, ...overrides };
@@ -58,14 +63,35 @@ describe('updateSchoolProfile', () => {
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
   });
 
+  test('WB-SP-03b: missing logo_url → 400 (logo wajib)', async () => {
+    const { next } = await run(profileCtrl.updateSchoolProfile, { body: { school_name: 'SMA 2', logo_url: '  ' } });
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
+    expect(prisma.schoolProfile.upsert).not.toHaveBeenCalled();
+  });
+
   test('WB-SP-04: valid → upserts and trims/sanitizes fields', async () => {
-    prisma.schoolProfile.upsert.mockResolvedValue({ id: 1, school_name: 'SMA 2' });
-    const { res } = await run(profileCtrl.updateSchoolProfile, { body: { school_name: '  SMA 2  ', npsn: '  123  ', address: '' } });
+    prisma.schoolProfile.findUnique.mockResolvedValue(null);
+    prisma.schoolProfile.upsert.mockResolvedValue({ id: 1, school_name: 'SMA 2', logo_url: '/uploads/logos/x.png' });
+    const { res } = await run(profileCtrl.updateSchoolProfile, { body: { school_name: '  SMA 2  ', npsn: '  123  ', address: '', logo_url: '/uploads/logos/x.png' } });
     const upsertArg = prisma.schoolProfile.upsert.mock.calls[0][0];
     expect(upsertArg.update.school_name).toBe('SMA 2');
     expect(upsertArg.update.npsn).toBe('123');
     expect(upsertArg.update.address).toBeNull(); // empty string → null
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('diperbarui') }));
+  });
+
+  test('WB-SP-05: logo replaced → old file deleted', async () => {
+    prisma.schoolProfile.findUnique.mockResolvedValue({ id: 1, logo_url: '/uploads/logos/old.png' });
+    prisma.schoolProfile.upsert.mockResolvedValue({ id: 1, school_name: 'SMA 2', logo_url: '/uploads/logos/new.png' });
+    await run(profileCtrl.updateSchoolProfile, { body: { school_name: 'SMA 2', logo_url: '/uploads/logos/new.png' } });
+    expect(deletePublicUpload).toHaveBeenCalledWith('/uploads/logos/old.png');
+  });
+
+  test('WB-SP-06: logo unchanged → no delete', async () => {
+    prisma.schoolProfile.findUnique.mockResolvedValue({ id: 1, logo_url: '/uploads/logos/same.png' });
+    prisma.schoolProfile.upsert.mockResolvedValue({ id: 1, school_name: 'SMA 2', logo_url: '/uploads/logos/same.png' });
+    await run(profileCtrl.updateSchoolProfile, { body: { school_name: 'SMA 2', logo_url: '/uploads/logos/same.png' } });
+    expect(deletePublicUpload).not.toHaveBeenCalled();
   });
 });
 
@@ -90,5 +116,21 @@ describe('uploadFile', () => {
     expect(payload.url).toBe('/uploads/images/logo.png');
     expect(payload.filename).toBe('logo.png');
     expect(payload.size).toBe(2048);
+  });
+});
+
+// ─── deleteUpload ───────────────────────────────────────────────────────────
+
+describe('deleteUpload', () => {
+  test('WB-UP-03: no url → 400', async () => {
+    const { next } = await run(uploadCtrl.deleteUpload, { body: {} });
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
+  });
+
+  test('WB-UP-04: url given → delegates to deletePublicUpload', async () => {
+    deletePublicUpload.mockReturnValue(true);
+    const { res } = await run(uploadCtrl.deleteUpload, { body: { url: '/uploads/logos/x.png' } });
+    expect(deletePublicUpload).toHaveBeenCalledWith('/uploads/logos/x.png');
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ removed: true }));
   });
 });
