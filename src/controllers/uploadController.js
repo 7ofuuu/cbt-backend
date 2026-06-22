@@ -8,6 +8,7 @@
 const path = require('path');
 const { asyncHandler, AppError } = require('../utils/asyncHandler');
 const { UPLOADS_ROOT } = require('../middlewares/uploadMiddleware');
+const { deletePublicUpload } = require('../utils/uploadFs');
 
 // Build a URL that the dashboard / Flutter app can fetch directly. We return
 // a path-only URL (no host) so it stays correct whether the API is on
@@ -27,4 +28,15 @@ const uploadFile = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { uploadFile };
+// DELETE /api/upload  body: { url }
+// Removes an uploaded file from disk. Used by the dashboard to clean up a
+// freshly-uploaded image that the user replaced or discarded before saving,
+// so abandoned uploads don't accumulate. Path is guarded to the uploads root.
+const deleteUpload = asyncHandler(async (req, res) => {
+  const url = req.body?.url || req.query?.url;
+  if (!url) throw new AppError('URL file tidak diberikan', 400);
+  const removed = deletePublicUpload(url);
+  res.json({ message: removed ? 'File dihapus' : 'File tidak ditemukan', removed });
+});
+
+module.exports = { uploadFile, deleteUpload };
