@@ -7,6 +7,7 @@
 const prisma = require('../config/db');
 const { asyncHandler, AppError } = require('../utils/asyncHandler');
 const activityLogService = require('../services/activityLogService');
+const { deletePublicUpload } = require('../utils/uploadFs');
 
 // Ensure the singleton row exists (upsert with id = 1)
 const ensureProfile = async () => {
@@ -46,8 +47,15 @@ const updateSchoolProfile = asyncHandler(async (req, res) => {
     throw new AppError('Nama sekolah wajib diisi', 400);
   }
 
+  if (!logo_url || !logo_url.trim()) {
+    throw new AppError('Logo sekolah wajib diunggah', 400);
+  }
+
   // Sanitize: trim all string fields
   const sanitize = (v) => (typeof v === 'string' ? v.trim() || null : v ?? null);
+
+  // Snapshot the current logo so we can delete it from disk if it gets replaced.
+  const existing = await prisma.schoolProfile.findUnique({ where: { id: 1 } });
 
   const profile = await prisma.schoolProfile.upsert({
     where: { id: 1 },
@@ -83,6 +91,12 @@ const updateSchoolProfile = asyncHandler(async (req, res) => {
       accreditation: sanitize(accreditation),
     },
   });
+
+  // If the logo changed, remove the previous file from disk so old logos don't
+  // orphan. Best-effort and only touches local "/uploads/..." paths.
+  if (existing?.logo_url && existing.logo_url !== profile.logo_url) {
+    deletePublicUpload(existing.logo_url);
+  }
 
   // Activity log
   await activityLogService.logFromRequest(req, 'UPDATE_SCHOOL_PROFILE',
