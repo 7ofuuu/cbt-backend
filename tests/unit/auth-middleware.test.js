@@ -99,6 +99,46 @@ describe('verifyToken', () => {
     expect(next).toHaveBeenCalled();
     expect(req.user).toMatchObject({ id: 1, role: 'admin', is_super_admin: false });
   });
+
+  // ─── Single active session (Opsi A) ─────────────────────────────────────────
+
+  test('WB-VM-09: token sid matches DB active_session_id → next()', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 1, role: 'admin', is_active: true, is_super_admin: false, active_session_id: 'sess-current' });
+    const token = makeToken({ id: 1, role: 'admin', is_super_admin: false, sid: 'sess-current' });
+    const req = { headers: { authorization: `Bearer ${token}` } };
+    const res = makeRes();
+    await verifyToken(req, res, next);
+    expect(next).toHaveBeenCalled();
+  });
+
+  test('WB-VM-10: token sid does NOT match DB active_session_id (logged in elsewhere) → 401', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 1, role: 'admin', is_active: true, is_super_admin: false, active_session_id: 'sess-NEW' });
+    const token = makeToken({ id: 1, role: 'admin', is_super_admin: false, sid: 'sess-OLD' });
+    const req = { headers: { authorization: `Bearer ${token}` } };
+    const res = makeRes();
+    await verifyToken(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('WB-VM-11: token has sid but DB active_session_id was cleared by logout → 401', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 1, role: 'admin', is_active: true, is_super_admin: false, active_session_id: null });
+    const token = makeToken({ id: 1, role: 'admin', is_super_admin: false, sid: 'sess-OLD' });
+    const req = { headers: { authorization: `Bearer ${token}` } };
+    const res = makeRes();
+    await verifyToken(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('WB-VM-12: legacy token without sid → still allowed (backward compatible)', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 1, role: 'admin', is_active: true, is_super_admin: false, active_session_id: 'sess-current' });
+    const token = makeToken({ id: 1, role: 'admin', is_super_admin: false });
+    const req = { headers: { authorization: `Bearer ${token}` } };
+    const res = makeRes();
+    await verifyToken(req, res, next);
+    expect(next).toHaveBeenCalled();
+  });
 });
 
 // ─── checkRole ───────────────────────────────────────────────────────────────

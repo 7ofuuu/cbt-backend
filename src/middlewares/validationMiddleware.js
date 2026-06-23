@@ -31,6 +31,7 @@ const verifyToken = async (req, res, next) => {
         role: true,
         is_active: true,
         is_super_admin: true,
+        active_session_id: true,
       },
     });
 
@@ -40,6 +41,11 @@ const verifyToken = async (req, res, next) => {
 
     if (user.role !== decoded.role) {
       return res.status(401).json({ error: 'Role akun berubah, silakan login ulang' });
+    }
+
+    // Single active session: sid must match; legacy tokens without sid still pass.
+    if (decoded.sid && decoded.sid !== user.active_session_id) {
+      return res.status(401).json({ error: 'Sesi digantikan oleh login di perangkat lain' });
     }
 
     req.user = {
