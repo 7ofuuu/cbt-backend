@@ -314,34 +314,8 @@ describe('finalizeScore', () => {
   });
 });
 
-// ─── batchCreateUsers ─────────────────────────────────────────────────────────
-
-describe('batchCreateUsers', () => {
-  test('WB-UC-36: non-array users → 400', async () => {
-    const { next } = await run(ctrl.batchCreateUsers, { body: { users: 'x' } });
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
-  });
-
-  test('WB-UC-37: more than 500 users → 400', async () => {
-    const users = Array.from({ length: 501 }, (_, i) => ({ username: `u${i}` }));
-    const { next } = await run(ctrl.batchCreateUsers, { body: { users } });
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
-  });
-
-  test('WB-UC-38: mixed valid/invalid → reports success and failed counts', async () => {
-    prisma.user.create.mockResolvedValue({ id: 10, username: 'good' });
-    prisma.admin.create.mockResolvedValue({});
-    const users = [
-      { username: 'good', password: 'p', role: 'admin', full_name: 'G' },
-      { username: 'bad' }, // missing fields
-    ];
-    const { res } = await run(ctrl.batchCreateUsers, { body: { users } });
-    expect(res.status).toHaveBeenCalledWith(201);
-    const payload = res.json.mock.calls[0][0];
-    expect(payload.success).toBe(1);
-    expect(payload.failed).toBe(1);
-  });
-});
+// Catatan: batchCreateUsers dipindah ke services/usersBatchService.
+// Lihat tests/unit/users-batch-service.test.js (UB-04..UB-06).
 
 // ─── batchDeleteUsers ─────────────────────────────────────────────────────────
 
