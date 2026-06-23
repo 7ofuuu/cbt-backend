@@ -10,7 +10,6 @@ const {
   getUserDetail,
   updateUser,
   createUser,
-  batchCreateUsers,
   batchDeleteUsers,
   updateUserRole,
   toggleUserStatus,
@@ -26,7 +25,6 @@ router.get('/teachers', verifyToken, checkRole('admin'), getAllTeachers);   // G
 router.get('/students', verifyToken, checkRole('admin'), getAllStudents);   // Get all students
 router.get('/count', verifyToken, checkRole('admin'), countUsersByRole);    // Count users by role
 router.post('/', verifyToken, checkRole('admin'), createUser);              // Create user
-router.post('/batch', verifyToken, checkRole('admin'), batchCreateUsers);   // Batch create users
 router.post('/batch-delete', verifyToken, checkRole('admin'), batchDeleteUsers); // Batch delete users
 router.get('/:id', verifyToken, checkRole('admin'), getUserDetail);         // Get user detail
 router.put('/:id', verifyToken, checkRole('admin'), updateUser);            // Update user
