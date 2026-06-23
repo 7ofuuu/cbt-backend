@@ -92,11 +92,21 @@ const validateClassroomConsistency = (classroom, gradeLevel, major) => {
  * @param {import('@prisma/client').PrismaClient} [tx] - Optional transaction client
  * @returns {Promise<object>} Created user
  */
+// Ubah error unique-constraint Prisma (P2002) jadi pesan ramah per field.
+const toFriendlyUniqueError = (error, { username, nip, nisn }) => {
+  if (error?.code !== 'P2002') return error;
+  const target = Array.isArray(error.meta?.target) ? error.meta.target.join(',') : String(error.meta?.target || '');
+  if (target.includes('nip')) return new AppError(`NIP '${nip}' sudah digunakan`, 409);
+  if (target.includes('nisn')) return new AppError(`NISN '${nisn}' sudah digunakan`, 409);
+  if (target.includes('username')) return new AppError(`Username '${username}' sudah digunakan`, 409);
+  return new AppError('Data sudah digunakan (duplikat)', 409);
+};
+
 const createUserWithProfile = async (params, tx = prisma) => {
-  const { 
-    username, password, role, full_name, 
-    classroom, grade_level, major, nisn, 
-    nip, subject, is_coordinator 
+  const {
+    username, password, role, full_name,
+    classroom, grade_level, major, nisn,
+    nip, subject, is_coordinator
   } = params;
 
   const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
@@ -156,11 +166,15 @@ const createUserWithProfile = async (params, tx = prisma) => {
     return newUser;
   };
 
-  // If already in a transaction, use it directly; otherwise wrap in transaction
-  if (tx !== prisma) {
-    return performCreate(tx);
+  try {
+    // If already in a transaction, use it directly; otherwise wrap in transaction
+    if (tx !== prisma) {
+      return await performCreate(tx);
+    }
+    return await prisma.$transaction(performCreate);
+  } catch (error) {
+    throw toFriendlyUniqueError(error, { username, nip, nisn });
   }
-  return prisma.$transaction(performCreate);
 };
 
 /**
