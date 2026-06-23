@@ -135,6 +135,22 @@ describe('createUserWithProfile', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(result).toEqual({ id: 7 });
   });
+
+  test('WB-US-16: duplikat username (P2002) -> AppError 409 ramah', async () => {
+    const dupErr = Object.assign(new Error('Unique constraint failed'), { code: 'P2002', meta: { target: ['users_username_key'] } });
+    prisma.user.create.mockRejectedValue(dupErr);
+    await expect(
+      createUserWithProfile({ username: 'admin1', password: 'p', role: 'admin', full_name: 'A' })
+    ).rejects.toMatchObject({ statusCode: 409, message: "Username 'admin1' sudah digunakan" });
+  });
+
+  test('WB-US-17: duplikat NIP (P2002) -> AppError 409 ramah', async () => {
+    const dupErr = Object.assign(new Error('Unique constraint failed'), { code: 'P2002', meta: { target: ['teachers_nip_key'] } });
+    prisma.teacher.create.mockRejectedValue(dupErr);
+    await expect(
+      createUserWithProfile({ username: 't', password: 'p', role: 'teacher', full_name: 'T', subject: 'IPA', nip: '123' })
+    ).rejects.toMatchObject({ statusCode: 409, message: expect.stringMatching(/NIP.*sudah digunakan/i) });
+  });
 });
 
 // ─── buildPagination ──────────────────────────────────────────────────────────
