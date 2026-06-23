@@ -4,6 +4,7 @@
  */
 const prisma = require('../config/db');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { asyncHandler, AppError } = require('../utils/asyncHandler');
 const { createUserWithProfile, SALT_ROUNDS } = require('../services/userService');
@@ -74,11 +75,26 @@ const login = asyncHandler(async (req, res) => {
 
   const profileData = getProfileData(user);
 
-  const token = jwt.sign(
-    { id: user.id, role: user.role, is_super_admin: user.is_super_admin || false },
-    process.env.JWT_SECRET,
-    { expiresIn: '1d', algorithm: 'HS256' }
-  );
+  const payload = { id: user.id, role: user.role, is_super_admin: user.is_super_admin || false };
+
+  // Single active session (students only): rotate session and block any exam in
+  // progress, since a second login during an exam means another device took over.
+  if (user.role === 'student') {
+    const sessionId = crypto.randomUUID();
+    payload.sid = sessionId;
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { active_session_id: sessionId },
+    });
+    if (user.student) {
+      await prisma.examParticipant.updateMany({
+        where: { student_id: user.student.student_id, exam_status: 'IN_PROGRESS', is_blocked: false },
+        data: { is_blocked: true, block_reason: 'Login di perangkat lain saat ujian' },
+      });
+    }
+  }
+
+  const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1d', algorithm: 'HS256' });
 
   await activityLogService.logFromRequest(req, 'LOGIN',
     `User ${username} (${user.role}) berhasil login`,
@@ -240,6 +256,14 @@ const changePassword = asyncHandler(async (req, res) => {
 const logout = asyncHandler(async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { username: true } });
   const username = user?.username || `ID:${req.user.id}`;
+
+  // Single active session (students only): clear the session id to invalidate this token.
+  if (req.user.role === 'student') {
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { active_session_id: null },
+    });
+  }
 
   await activityLogService.logFromRequest(req, 'LOGOUT',
     `User ${username} (${req.user.role}) berhasil logout`,

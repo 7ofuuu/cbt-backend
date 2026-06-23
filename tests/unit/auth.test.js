@@ -18,6 +18,7 @@ jest.mock('../../src/services/userService', () => ({
 
 const prisma = require('../../src/config/db');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { createUserWithProfile } = require('../../src/services/userService');
 const activityLogService = require('../../src/services/activityLogService');
 
@@ -152,6 +153,74 @@ describe('login', () => {
     const response = res.json.mock.calls[0][0];
     expect(response.user.profile.is_coordinator).toBeUndefined();
   });
+
+  // ─── Single active session (Opsi A) - students only ──────────────────────────
+
+  const mockStudentUser = {
+    id: 3,
+    username: 'siswa1',
+    password: 'hashedpw',
+    role: 'student',
+    is_active: true,
+    is_super_admin: false,
+    admin: null,
+    teacher: null,
+    student: { student_id: 1, full_name: 'Siswa Satu', classroom: 'X-IPA-1' },
+  };
+
+  test('WB-18: student login persists a new active_session_id', async () => {
+    prisma.user.findUnique.mockResolvedValue(mockStudentUser);
+    bcrypt.compare.mockResolvedValue(true);
+    const { req, res, next } = makeReqRes({ username: 'siswa1', password: 'correct' });
+    login(req, res, next); await flush();
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 3 },
+      data: expect.objectContaining({ active_session_id: expect.any(String) }),
+    }));
+  });
+
+  test('WB-19: student token sid matches the persisted active_session_id', async () => {
+    prisma.user.findUnique.mockResolvedValue(mockStudentUser);
+    bcrypt.compare.mockResolvedValue(true);
+    const { req, res, next } = makeReqRes({ username: 'siswa1', password: 'correct' });
+    login(req, res, next); await flush();
+    const token = res.json.mock.calls[0][0].token;
+    const storedSid = prisma.user.update.mock.calls[0][0].data.active_session_id;
+    expect(jwt.decode(token).sid).toBe(storedSid);
+  });
+
+  test('WB-20: two student logins produce different session ids (old session superseded)', async () => {
+    prisma.user.findUnique.mockResolvedValue(mockStudentUser);
+    bcrypt.compare.mockResolvedValue(true);
+    const first = makeReqRes({ username: 'siswa1', password: 'correct' });
+    login(first.req, first.res, first.next); await flush();
+    const second = makeReqRes({ username: 'siswa1', password: 'correct' });
+    login(second.req, second.res, second.next); await flush();
+    const sid1 = prisma.user.update.mock.calls[0][0].data.active_session_id;
+    const sid2 = prisma.user.update.mock.calls[1][0].data.active_session_id;
+    expect(sid1).not.toBe(sid2);
+  });
+
+  test('WB-21: admin login does NOT create a session (no sid, no active_session_id write)', async () => {
+    prisma.user.findUnique.mockResolvedValue(mockAdminUser);
+    bcrypt.compare.mockResolvedValue(true);
+    const { req, res, next } = makeReqRes({ username: 'admin1', password: 'correct' });
+    login(req, res, next); await flush();
+    const token = res.json.mock.calls[0][0].token;
+    expect(jwt.decode(token).sid).toBeUndefined();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  test('WB-22: student login blocks any IN_PROGRESS exam (second login during exam)', async () => {
+    prisma.user.findUnique.mockResolvedValue(mockStudentUser);
+    bcrypt.compare.mockResolvedValue(true);
+    const { req, res, next } = makeReqRes({ username: 'siswa1', password: 'correct' });
+    login(req, res, next); await flush();
+    expect(prisma.examParticipant.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ student_id: 1, exam_status: 'IN_PROGRESS' }),
+      data: expect.objectContaining({ is_blocked: true }),
+    }));
+  });
 });
 
 // ─── register ────────────────────────────────────────────────────────────────
@@ -270,5 +339,22 @@ describe('logout', () => {
     const { req, res, next } = makeReqRes({}, { id: 99, role: 'admin' });
     logout(req, res, next); await flush();
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: 'Logout berhasil' }));
+  });
+
+  test('WB-17c: student logout clears active_session_id so the token can no longer be reused', async () => {
+    prisma.user.findUnique.mockResolvedValue({ username: 'siswa1' });
+    const { req, res, next } = makeReqRes({}, { id: 3, role: 'student' });
+    logout(req, res, next); await flush();
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 3 },
+      data: { active_session_id: null },
+    }));
+  });
+
+  test('WB-17d: admin logout does not touch active_session_id (sessions are student-only)', async () => {
+    prisma.user.findUnique.mockResolvedValue({ username: 'admin1' });
+    const { req, res, next } = makeReqRes({}, { id: 1, role: 'admin' });
+    logout(req, res, next); await flush();
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });
