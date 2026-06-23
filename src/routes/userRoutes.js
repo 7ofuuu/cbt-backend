@@ -13,6 +13,7 @@ const {
   createUser,
   batchDeleteUsers,
   importUsers,
+  downloadImportTemplate,
   updateUserRole,
   toggleUserStatus,
   deleteUser,
@@ -29,6 +30,7 @@ router.get('/count', verifyToken, checkRole('admin'), countUsersByRole);    // C
 router.post('/', verifyToken, checkRole('admin'), createUser);              // Create user
 router.post('/batch-delete', verifyToken, checkRole('admin'), batchDeleteUsers); // Batch delete users
 router.post('/import', verifyToken, checkRole('admin'), uploadSpreadsheet, importUsers); // Import users from .xlsx
+router.get('/import/template', verifyToken, checkRole('admin'), downloadImportTemplate); // Download import template
 router.get('/:id', verifyToken, checkRole('admin'), getUserDetail);         // Get user detail
 router.put('/:id', verifyToken, checkRole('admin'), updateUser);            // Update user
 router.put('/:id/role', verifyToken, checkRole('admin'), updateUserRole);   // Update role

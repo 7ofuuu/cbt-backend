@@ -20,6 +20,7 @@ const { calculateAndSaveResult } = require('../services/scoreService');
 const activityLogService = require('../services/activityLogService');
 const { createUsersBatch } = require('../services/usersBatchService');
 const { parseUserSheet } = require('../services/excel/userImportParser');
+const { buildImportTemplate } = require('../services/excel/userImportTemplateService');
 
 const parseBooleanLike = (value, fieldName = 'boolean') => {
   if (value === undefined || value === null || value === '') return undefined;
@@ -511,6 +512,19 @@ const importUsers = asyncHandler(async (req, res) => {
   });
 });
 
+// GET /api/users/import/template?role=student|teacher|admin
+const downloadImportTemplate = asyncHandler(async (req, res) => {
+  const role = req.query.role;
+  if (!['student', 'teacher', 'admin'].includes(role)) {
+    throw new AppError('role tidak valid (student|teacher|admin)', 400);
+  }
+  const wb = await buildImportTemplate(role);
+  const buffer = await wb.xlsx.writeBuffer();
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="template_${role}.xlsx"`);
+  res.send(Buffer.from(buffer));
+});
+
 module.exports = {
   getAllUsers,
   getAllAdmins,
@@ -525,6 +539,7 @@ module.exports = {
   deleteUser,
   batchDeleteUsers,
   importUsers,
+  downloadImportTemplate,
   scoreAnswer,
   finalizeScore,
 };
