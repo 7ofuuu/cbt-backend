@@ -10,6 +10,7 @@ const { buildPagination, paginatedResponse } = require('../services/userService'
 const activityLogService = require('../services/activityLogService');
 const { validateSubjectAccess, buildSubjectFilter } = require('../services/subjectAccessService');
 const { EXAM_LIST_INCLUDE, formatExamForList } = require('../services/examResultFormatter');
+const { buildExamScoreWorkbook, buildExportFilename } = require('../services/excel/examScoreExportService');
 
 // GET /api/exam-results/participant/:exam_participant_id (all teachers can view)
 const getResultByParticipant = asyncHandler(async (req, res) => {
@@ -504,9 +505,45 @@ const getArchivedExams = asyncHandler(async (req, res) => {
   res.json(paginatedResponse(formatted, total, page, limit));
 });
 
+// GET /api/exam-results/exam/:exam_id/export - Export nilai semua kelas ke .xlsx
+const exportExamScores = asyncHandler(async (req, res) => {
+  const teacher = req.teacher;
+  const examId = parseInt(req.params.exam_id);
+
+  const exam = await prisma.exam.findUnique({ where: { exam_id: examId } });
+  if (!exam) throw new AppError('Ujian tidak ditemukan', 404);
+
+  validateSubjectAccess(teacher, exam.subject, 'ujian');
+
+  const participantsRaw = await prisma.examParticipant.findMany({
+    where: { exam_id: examId },
+    include: {
+      student: { select: { full_name: true, nisn: true, classroom: true } },
+      exam_result: { select: { final_score: true, submit_date: true } },
+    },
+  });
+
+  const participants = participantsRaw.map((p) => ({
+    full_name: p.student?.full_name,
+    nisn: p.student?.nisn,
+    classroom: p.student?.classroom,
+    final_score: p.exam_result?.final_score ?? null,
+    exam_status: p.exam_status,
+    submit_date: p.exam_result?.submit_date ?? p.end_time ?? null,
+  }));
+
+  const wb = await buildExamScoreWorkbook({ exam, participants });
+  const buffer = await wb.xlsx.writeBuffer();
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${buildExportFilename(exam.exam_name)}"`);
+  res.send(Buffer.from(buffer));
+});
+
 module.exports = {
   getResultByParticipant,
   getResultByExam,
+  exportExamScores,
   getMyResults,
   calculateAndSaveResult: calculateAndSaveResultHandler,
   updateManualScore,
