@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken, checkRole } = require('../middlewares/validationMiddleware');
+const { uploadSpreadsheet } = require('../middlewares/spreadsheetUpload');
 const {
   getAllUsers,
   getAllAdmins,
@@ -11,6 +12,7 @@ const {
   updateUser,
   createUser,
   batchDeleteUsers,
+  importUsers,
   updateUserRole,
   toggleUserStatus,
   deleteUser,
@@ -26,6 +28,7 @@ router.get('/students', verifyToken, checkRole('admin'), getAllStudents);   // G
 router.get('/count', verifyToken, checkRole('admin'), countUsersByRole);    // Count users by role
 router.post('/', verifyToken, checkRole('admin'), createUser);              // Create user
 router.post('/batch-delete', verifyToken, checkRole('admin'), batchDeleteUsers); // Batch delete users
+router.post('/import', verifyToken, checkRole('admin'), uploadSpreadsheet, importUsers); // Import users from .xlsx
 router.get('/:id', verifyToken, checkRole('admin'), getUserDetail);         // Get user detail
 router.put('/:id', verifyToken, checkRole('admin'), updateUser);            // Update user
 router.put('/:id/role', verifyToken, checkRole('admin'), updateUserRole);   // Update role

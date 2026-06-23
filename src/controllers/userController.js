@@ -18,6 +18,8 @@ const {
 } = require('../services/userService');
 const { calculateAndSaveResult } = require('../services/scoreService');
 const activityLogService = require('../services/activityLogService');
+const { createUsersBatch } = require('../services/usersBatchService');
+const { parseUserSheet } = require('../services/excel/userImportParser');
 
 const parseBooleanLike = (value, fieldName = 'boolean') => {
   if (value === undefined || value === null || value === '') return undefined;
@@ -484,6 +486,31 @@ const batchDeleteUsers = asyncHandler(async (req, res) => {
   });
 });
 
+// POST /api/users/import - Import banyak user dari file .xlsx
+const importUsers = asyncHandler(async (req, res) => {
+  if (!req.file) throw new AppError('File .xlsx wajib diunggah', 400);
+
+  const role = req.body.role;
+  if (!['student', 'teacher', 'admin'].includes(role)) {
+    throw new AppError('role tidak valid (student|teacher|admin)', 400);
+  }
+
+  const rows = await parseUserSheet(req.file.buffer, role);
+  if (rows.length === 0) throw new AppError('File kosong atau format tidak sesuai', 400);
+
+  const users = rows.map((r) => ({ ...r, role }));
+  const result = await createUsersBatch(users);
+
+  await activityLogService.logFromRequest(req, 'IMPORT_USERS',
+    `Import ${result.success} ${role} dari file Excel (${result.failed} gagal)`,
+    { metadata: { role, total: result.total, success: result.success, failed: result.failed } });
+
+  res.status(201).json({
+    message: `${result.success} user berhasil dibuat, ${result.failed} gagal`,
+    ...result,
+  });
+});
+
 module.exports = {
   getAllUsers,
   getAllAdmins,
@@ -497,6 +524,7 @@ module.exports = {
   toggleUserStatus,
   deleteUser,
   batchDeleteUsers,
+  importUsers,
   scoreAnswer,
   finalizeScore,
 };
