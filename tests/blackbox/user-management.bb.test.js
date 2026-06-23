@@ -177,21 +177,15 @@ describe('DELETE /api/users/:id', () => {
   });
 });
 
-// ─── POST /api/users/batch ────────────────────────────────────────────────────
+// ─── POST /api/users/batch (dihapus, digantikan /api/users/import) ─────────────
 
 describe('POST /api/users/batch', () => {
-  test('BB-U12: batch create with valid array → 201 with success count', async () => {
-    createUserWithProfile.mockResolvedValue({ id: 99 });
-    const users = [
-      { username: 'batch1', password: 'Pass1234', role: 'admin', full_name: 'Batch One' },
-      { username: 'batch2', password: 'Pass1234', role: 'admin', full_name: 'Batch Two' },
-    ];
+  test('BB-U12: endpoint batch sudah dihapus → 404', async () => {
     const res = await request(app)
       .post('/api/users/batch')
       .set('Authorization', `Bearer ${adminToken()}`)
-      .send({ users });
-    expect(res.status).toBe(201);
-    expect(res.body).toHaveProperty('success');
+      .send({ users: [] });
+    expect(res.status).toBe(404);
   });
 });
 
