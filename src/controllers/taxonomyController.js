@@ -9,31 +9,13 @@
  *   - Deletion is *soft* (is_active = false). Existing exam/student rows hold
  *     these as plain string snapshots and must keep working even after the
  *     taxonomy row is "deleted" - that's why we never hard-delete here.
- *   - PUT supports an opt-in `cascade_rename` flag that updates the matching
- *     string snapshot on Subject across Exam/QuestionBank/Question/Teacher,
- *     on GradeLevel/Major across Exam/QuestionBank/Question/Student. Without
- *     the flag the rename only affects future dropdowns.
+ *   - The key column (Subject.name, GradeLevel.value, Major.value) is
+ *     immutable after creation. Snapshots on exam/student/etc. therefore never
+ *     go stale, so no cascade rename is needed. PUT only edits label/color/
+ *     sort_order/is_active.
  */
 const prisma = require('../config/db');
 const { asyncHandler, AppError } = require('../utils/asyncHandler');
-const { cascadeRename } = require('../services/taxonomyCascadeService');
-
-// Targets for the cascade rename - kept here next to the controller because
-// they describe *which historical snapshots this taxonomy lives in*, which
-// is controller-level knowledge, not generic service knowledge.
-const SUBJECT_TARGETS = [
-  { model: 'exam', key: 'exams' },
-  { model: 'questionBank', key: 'question_banks' },
-  { model: 'question', key: 'questions' },
-  { model: 'teacher', key: 'teachers' },
-];
-const GRADE_LEVEL_TARGETS = [
-  { model: 'exam', key: 'exams' },
-  { model: 'questionBank', key: 'question_banks' },
-  { model: 'question', key: 'questions' },
-  { model: 'student', key: 'students' },
-];
-const MAJOR_TARGETS = GRADE_LEVEL_TARGETS;
 
 // ---------------------------------------------------------------------------
 // Combined GET - single call for the dashboard's TaxonomyContext.
@@ -93,38 +75,20 @@ const createSubject = asyncHandler(async (req, res) => {
 
 const updateSubject = asyncHandler(async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const { name, color, sort_order, is_active, cascade_rename } = req.body;
+  // name immutable - perubahan name diabaikan.
+  const { color, sort_order, is_active } = req.body;
 
   const existing = await prisma.subject.findUnique({ where: { subject_id: id } });
   if (!existing) throw new AppError('Mata pelajaran tidak ditemukan', 404);
 
   const data = {};
-  if (name !== undefined) data.name = name.trim();
   if (color !== undefined) data.color = color?.trim() || null;
   if (sort_order !== undefined) data.sort_order = Number(sort_order) || 0;
   if (is_active !== undefined) data.is_active = !!is_active;
 
-  const updated = await prisma.subject.update({
-    where: { subject_id: id },
-    data,
-  }).catch((e) => {
-    if (e.code === 'P2002') throw new AppError('Mata pelajaran sudah ada', 409);
-    throw e;
-  });
+  const updated = await prisma.subject.update({ where: { subject_id: id }, data });
 
-  // Cascade rename: rewrite the string snapshot on historical rows so they
-  // still point at the renamed taxonomy value instead of dangling at the old
-  // one. Skipped unless the caller opts in.
-  const cascade = cascade_rename
-    ? await cascadeRename({
-        field: 'subject',
-        oldValue: existing.name,
-        newValue: name?.trim(),
-        targets: SUBJECT_TARGETS,
-      })
-    : null;
-
-  res.json({ subject: updated, cascade });
+  res.json({ subject: updated });
 });
 
 const deactivateSubject = asyncHandler(async (req, res) => {
@@ -178,35 +142,20 @@ const createGradeLevel = asyncHandler(async (req, res) => {
 
 const updateGradeLevel = asyncHandler(async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const { value, label, sort_order, is_active, cascade_rename } = req.body;
+  // value immutable - perubahan value diabaikan.
+  const { label, sort_order, is_active } = req.body;
 
   const existing = await prisma.gradeLevel.findUnique({ where: { grade_level_id: id } });
   if (!existing) throw new AppError('Tingkat tidak ditemukan', 404);
 
   const data = {};
-  if (value !== undefined) data.value = value.trim();
   if (label !== undefined) data.label = label.trim();
   if (sort_order !== undefined) data.sort_order = Number(sort_order) || 0;
   if (is_active !== undefined) data.is_active = !!is_active;
 
-  const updated = await prisma.gradeLevel.update({
-    where: { grade_level_id: id },
-    data,
-  }).catch((e) => {
-    if (e.code === 'P2002') throw new AppError('Tingkat sudah ada', 409);
-    throw e;
-  });
+  const updated = await prisma.gradeLevel.update({ where: { grade_level_id: id }, data });
 
-  const cascade = cascade_rename
-    ? await cascadeRename({
-        field: 'grade_level',
-        oldValue: existing.value,
-        newValue: value?.trim(),
-        targets: GRADE_LEVEL_TARGETS,
-      })
-    : null;
-
-  res.json({ grade_level: updated, cascade });
+  res.json({ grade_level: updated });
 });
 
 const deactivateGradeLevel = asyncHandler(async (req, res) => {
@@ -260,35 +209,20 @@ const createMajor = asyncHandler(async (req, res) => {
 
 const updateMajor = asyncHandler(async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const { value, label, sort_order, is_active, cascade_rename } = req.body;
+  // value immutable - perubahan value diabaikan.
+  const { label, sort_order, is_active } = req.body;
 
   const existing = await prisma.major.findUnique({ where: { major_id: id } });
   if (!existing) throw new AppError('Jurusan tidak ditemukan', 404);
 
   const data = {};
-  if (value !== undefined) data.value = value.trim();
   if (label !== undefined) data.label = label.trim();
   if (sort_order !== undefined) data.sort_order = Number(sort_order) || 0;
   if (is_active !== undefined) data.is_active = !!is_active;
 
-  const updated = await prisma.major.update({
-    where: { major_id: id },
-    data,
-  }).catch((e) => {
-    if (e.code === 'P2002') throw new AppError('Jurusan sudah ada', 409);
-    throw e;
-  });
+  const updated = await prisma.major.update({ where: { major_id: id }, data });
 
-  const cascade = cascade_rename
-    ? await cascadeRename({
-        field: 'major',
-        oldValue: existing.value,
-        newValue: value?.trim(),
-        targets: MAJOR_TARGETS,
-      })
-    : null;
-
-  res.json({ major: updated, cascade });
+  res.json({ major: updated });
 });
 
 const deactivateMajor = asyncHandler(async (req, res) => {

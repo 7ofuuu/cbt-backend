@@ -7,69 +7,27 @@
  */
 jest.mock('../../src/config/db');
 jest.mock('bcryptjs');
+jest.mock('../../src/services/taxonomyValidationService', () => ({
+  loadActiveTaxonomy: jest.fn().mockResolvedValue({
+    subjects: new Set(['IPA', 'Matematika']),
+    gradeLevels: new Set(['X', 'XI', 'XII']),
+    majors: new Set(['IPA', 'IPS', 'TKJ', 'Bahasa']),
+  }),
+  assertStudentClassroom: jest.fn(({ classroom }) => {
+    const [grade, major] = classroom.split('-');
+    return { grade_level: grade, major };
+  }),
+}));
 
 const prisma = require('../../src/config/db');
 const bcrypt = require('bcryptjs');
 const {
-  validateClassroom,
-  validateClassroomConsistency,
   createUserWithProfile,
   buildPagination,
   paginatedResponse,
   formatUserData,
 } = require('../../src/services/userService');
 const { AppError } = require('../../src/utils/asyncHandler');
-
-// ─── validateClassroom ────────────────────────────────────────────────────────
-
-describe('validateClassroom', () => {
-  test('WB-US-01: valid format → parsed prefix/major/number', () => {
-    expect(validateClassroom('XI-IPS-2')).toEqual({ prefix: 'XI', major: 'IPS', number: '2' });
-  });
-
-  test('WB-US-02: each grade prefix (X/XI/XII) is accepted', () => {
-    expect(validateClassroom('X-IPA-1').prefix).toBe('X');
-    expect(validateClassroom('XII-Bahasa-3').prefix).toBe('XII');
-  });
-
-  test('WB-US-03: invalid format → AppError 400', () => {
-    expect(() => validateClassroom('10-IPA-1')).toThrow(AppError);
-    try {
-      validateClassroom('bad');
-    } catch (e) {
-      expect(e.statusCode).toBe(400);
-    }
-  });
-
-  test('WB-US-04: unknown major rejected', () => {
-    expect(() => validateClassroom('X-MIPA-1')).toThrow(AppError);
-  });
-});
-
-// ─── validateClassroomConsistency ─────────────────────────────────────────────
-
-describe('validateClassroomConsistency', () => {
-  test('WB-US-05: consistent classroom/grade/major → derived values returned', () => {
-    expect(validateClassroomConsistency('XI-IPA-1', '11', 'IPA')).toEqual({ grade_level: '11', major: 'IPA' });
-  });
-
-  test('WB-US-06: grade_level omitted → derived from prefix', () => {
-    expect(validateClassroomConsistency('XII-IPS-2', undefined, undefined)).toEqual({ grade_level: '12', major: 'IPS' });
-  });
-
-  test('WB-US-07: grade_level mismatched with prefix → AppError 400', () => {
-    expect(() => validateClassroomConsistency('X-IPA-1', '12', 'IPA')).toThrow(AppError);
-    try {
-      validateClassroomConsistency('X-IPA-1', '12', 'IPA');
-    } catch (e) {
-      expect(e.statusCode).toBe(400);
-    }
-  });
-
-  test('WB-US-08: major mismatched with classroom → AppError 400', () => {
-    expect(() => validateClassroomConsistency('X-IPA-1', '10', 'IPS')).toThrow(AppError);
-  });
-});
 
 // ─── createUserWithProfile ────────────────────────────────────────────────────
 
@@ -112,17 +70,20 @@ describe('createUserWithProfile', () => {
     );
   });
 
-  test('WB-US-13: student with classroom → fields auto-derived from classroom', async () => {
+  test('WB-US-13: student dengan classroom → grade_level & major dari taksonomi (roman)', async () => {
     await createUserWithProfile({ username: 's', password: 'p', role: 'student', full_name: 'S', classroom: 'XI-IPA-1' });
     expect(prisma.student.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ classroom: 'XI-IPA-1', grade_level: '11', major: 'IPA' }) })
+      expect.objectContaining({ data: expect.objectContaining({ classroom: 'XI-IPA-1', grade_level: 'XI', major: 'IPA' }) })
     );
   });
 
-  test('WB-US-14: student with inconsistent classroom → AppError 400 propagated', async () => {
-    await expect(
-      createUserWithProfile({ username: 's', password: 'p', role: 'student', full_name: 'S', classroom: 'X-IPA-1', grade_level: '12' })
-    ).rejects.toMatchObject({ statusCode: 400 });
+  test('WB-US-14: student dengan jurusan taksonomi baru (TKJ) → tersimpan', async () => {
+    const { assertStudentClassroom } = require('../../src/services/taxonomyValidationService');
+    assertStudentClassroom.mockReturnValueOnce({ grade_level: 'X', major: 'TKJ' });
+    await createUserWithProfile({ username: 's', password: 'p', role: 'student', full_name: 'S', classroom: 'X-TKJ-1' });
+    expect(prisma.student.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ major: 'TKJ' }) })
+    );
   });
 
   test('WB-US-15: provided tx is used directly (no nested $transaction)', async () => {
