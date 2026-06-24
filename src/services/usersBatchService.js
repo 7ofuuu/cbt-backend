@@ -1,4 +1,6 @@
+const prisma = require('../config/db');
 const { createUserWithProfile } = require('./userService');
+const { loadActiveTaxonomy } = require('./taxonomyValidationService');
 const { AppError } = require('../utils/asyncHandler');
 
 // Normalisasi nilai boolean-like dari teks. Cocok dengan perilaku di userController:
@@ -27,6 +29,9 @@ const createUsersBatch = async (users) => {
     throw new AppError('Maksimal 500 user per batch', 400);
   }
 
+  // Muat taksonomi aktif sekali untuk seluruh batch (hindari query per-baris).
+  const active = await loadActiveTaxonomy();
+
   const results = { success: [], failed: [], errors: [] };
 
   for (const userData of users) {
@@ -40,7 +45,7 @@ const createUsersBatch = async (users) => {
       if (normalized.role === 'teacher' && !normalized.subject) {
         throw new AppError('subject (mata pelajaran) wajib diisi untuk guru', 400);
       }
-      const user = await createUserWithProfile(normalized);
+      const user = await createUserWithProfile(normalized, prisma, active);
       results.success.push({ username: user.username, id: user.id });
     } catch (error) {
       results.failed.push(userData.username || 'unknown');

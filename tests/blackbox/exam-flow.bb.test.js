@@ -11,6 +11,10 @@ jest.mock('../../src/services/activityLogService', () => ({
   getIpAddress: jest.fn().mockReturnValue('127.0.0.1'),
   getUserAgent: jest.fn().mockReturnValue('supertest'),
 }));
+jest.mock('../../src/services/taxonomyValidationService', () => ({
+  loadActiveTaxonomy: jest.fn().mockResolvedValue({ subjects: new Set(), gradeLevels: new Set(), majors: new Set() }),
+  assertExamTaxonomy: jest.fn(),
+}));
 jest.mock('../../src/services/scoreService', () => ({
   calculateScore: jest.fn().mockReturnValue({
     finalScore: 80, totalScore: 8, totalWeight: 10, hasEssay: false, allEssayGraded: true,

@@ -6,6 +6,9 @@ jest.mock('../../src/services/userService', () => {
   const actual = jest.requireActual('../../src/services/userService');
   return { ...actual, createUserWithProfile: jest.fn() };
 });
+jest.mock('../../src/services/taxonomyValidationService', () => ({
+  loadActiveTaxonomy: jest.fn().mockResolvedValue({ subjects: new Set(), gradeLevels: new Set(), majors: new Set() }),
+}));
 
 const { createUserWithProfile } = require('../../src/services/userService');
 const { createUsersBatch } = require('../../src/services/usersBatchService');

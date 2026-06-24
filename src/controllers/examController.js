@@ -16,6 +16,7 @@ const {
   getSubjectForCreate,
   isCoordinator,
 } = require('../services/subjectAccessService');
+const { loadActiveTaxonomy, assertExamTaxonomy } = require('../services/taxonomyValidationService');
 
 // POST /api/exams - Create exam with optional auto-assign students
 const createExam = asyncHandler(async (req, res) => {
@@ -45,6 +46,10 @@ const createExam = asyncHandler(async (req, res) => {
   if (endDate <= startDate) {
     throw new AppError('end_date harus setelah start_date', 400);
   }
+
+  // Validasi subject/tingkat/jurusan terhadap taksonomi aktif
+  const activeTax = await loadActiveTaxonomy();
+  assertExamTaxonomy({ subject: finalSubject, grade_level, major: major || null }, activeTax);
 
   const result = await prisma.$transaction(async (tx) => {
     const exam = await tx.exam.create({
@@ -201,6 +206,14 @@ const updateExam = asyncHandler(async (req, res) => {
     const durVal = parseInt(duration_minutes);
     if (isNaN(durVal) || durVal < 1) throw new AppError('duration_minutes harus bilangan positif', 400);
   }
+
+  // Validasi taksonomi untuk field yang diubah
+  const activeTax = await loadActiveTaxonomy();
+  assertExamTaxonomy({
+    subject: finalSubject,
+    grade_level: grade_level !== undefined ? grade_level : undefined,
+    major: major !== undefined ? (major || null) : undefined,
+  }, activeTax);
 
   const updated = await prisma.exam.update({
     where: { exam_id: exam.exam_id },
