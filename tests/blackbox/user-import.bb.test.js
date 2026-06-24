@@ -34,6 +34,9 @@ const makeXlsx = async (headers, rows) => {
 beforeEach(() => {
   jest.clearAllMocks();
   prisma.user.findUnique.mockResolvedValue(adminDbUser);
+  prisma.subject.findMany.mockResolvedValue([]);
+  prisma.gradeLevel.findMany.mockResolvedValue([]);
+  prisma.major.findMany.mockResolvedValue([]);
 });
 
 test('IMP-BB-01: import sukses -> success count', async () => {
