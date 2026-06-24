@@ -16,7 +16,6 @@ const {
   SALT_ROUNDS,
 } = require('../services/userService');
 const { loadActiveTaxonomy, assertStudentClassroom } = require('../services/taxonomyValidationService');
-const { calculateAndSaveResult } = require('../services/scoreService');
 const activityLogService = require('../services/activityLogService');
 const { createUsersBatch } = require('../services/usersBatchService');
 const { parseUserSheet } = require('../services/excel/userImportParser');
@@ -335,85 +334,6 @@ const deleteUser = asyncHandler(async (req, res) => {
   res.json({ message: 'User berhasil dihapus' });
 });
 
-// POST /api/users/score - Manual essay scoring (teacher)
-const scoreAnswer = asyncHandler(async (req, res) => {
-  const { answer_id, manual_score } = req.body;
-
-  if (!answer_id) throw new AppError('answer_id wajib diisi', 400);
-
-  const score = parseFloat(manual_score);
-  if (isNaN(score) || score < 0 || score > 100) {
-    throw new AppError('Nilai manual harus antara 0 dan 100', 400);
-  }
-
-  // Verify teacher owns the exam this answer belongs to
-  const answer = await prisma.answer.findUnique({
-    where: { answer_id: parseInt(answer_id) },
-    include: {
-      exam_participant: {
-        include: {
-          exam: { select: { teacher_id: true } },
-        },
-      },
-    },
-  });
-  if (!answer) throw new AppError('Jawaban tidak ditemukan', 404);
-
-  // Check ownership via teacher profile
-  const teacher = await prisma.teacher.findUnique({ where: { user_id: req.user.id } });
-  if (!teacher || answer.exam_participant.exam.teacher_id !== teacher.teacher_id) {
-    throw new AppError('Anda tidak memiliki akses ke jawaban ini', 403);
-  }
-
-  const updated = await prisma.answer.update({
-    where: { answer_id: parseInt(answer_id) },
-    data: { manual_score: score },
-  });
-
-  // Recalculate result after manual score update
-  const recalculated = await calculateAndSaveResult(answer.exam_participant_id);
-
-  // Audit log
-  await activityLogService.logFromRequest(req, 'UPDATE_MANUAL_SCORE',
-    `Teacher updated manual score for answer ${answer_id} to ${manual_score}`,
-    { metadata: { answer_id: parseInt(answer_id), manual_score: score } });
-
-  res.json({ message: 'Nilai manual berhasil diupdate', answer: updated, recalculated: { final_score: recalculated.finalScore, status: recalculated.status } });
-});
-
-// POST /api/users/finalize - Finalize score (uses scoreService)
-const finalizeScore = asyncHandler(async (req, res) => {
-  const { exam_participant_id } = req.body;
-
-  if (!exam_participant_id) throw new AppError('exam_participant_id wajib diisi', 400);
-
-  // Verify teacher owns the exam
-  const participant = await prisma.examParticipant.findUnique({
-    where: { exam_participant_id: parseInt(exam_participant_id) },
-    include: { exam: { select: { teacher_id: true } } },
-  });
-  if (!participant) throw new AppError('Peserta ujian tidak ditemukan', 404);
-
-  const teacher = await prisma.teacher.findUnique({ where: { user_id: req.user.id } });
-  if (!teacher || participant.exam.teacher_id !== teacher.teacher_id) {
-    throw new AppError('Anda tidak memiliki akses ke peserta ujian ini', 403);
-  }
-
-  const result = await calculateAndSaveResult(parseInt(exam_participant_id));
-
-  res.json({
-    message: 'Nilai berhasil difinalisasi',
-    result: {
-      exam_participant_id: parseInt(exam_participant_id),
-      final_score: result.finalScore,
-      total_score: result.totalScore,
-      total_weight: result.totalWeight,
-      has_essay: result.hasEssay,
-      status: result.status,
-    },
-  });
-});
-
 // POST /api/users/batch-delete - Delete multiple users at once (e.g. graduated students)
 const batchDeleteUsers = asyncHandler(async (req, res) => {
   const { user_ids, grade_level, major, classroom } = req.body;
@@ -540,6 +460,4 @@ module.exports = {
   batchDeleteUsers,
   importUsers,
   downloadImportTemplate,
-  scoreAnswer,
-  finalizeScore,
 };

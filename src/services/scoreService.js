@@ -17,6 +17,57 @@ const prisma = require('../config/db');
  *                          mc_option_ids, and question.answer_options
  * @returns {{ totalScore: number, totalWeight: number, finalScore: number, hasEssay: boolean, allEssayGraded: boolean }}
  */
+/**
+ * Score a single question. Returns the points obtained (0..scoreWeight).
+ * Shared by calculateScore (totals) and the detailed-result review so the
+ * per-question formula lives in exactly one place.
+ *
+ * @param {{ question_type: string, answer_options?: Array }} question
+ * @param {number} scoreWeight
+ * @param {{ is_correct?: boolean, manual_score?: number, mc_option_ids?: string }} answer
+ * @returns {number}
+ */
+const scoreSingleQuestion = (question, scoreWeight, answer) => {
+  if (!answer) return 0;
+  const questionType = question?.question_type;
+
+  if (questionType === 'ESSAY') {
+    if (answer.manual_score !== null && answer.manual_score !== undefined) {
+      return (answer.manual_score / 100) * scoreWeight;
+    }
+    return 0;
+  }
+
+  if (questionType === 'MULTIPLE_CHOICE') {
+    if (!answer.mc_option_ids || !question?.answer_options) return 0;
+
+    const selectedIds = answer.mc_option_ids
+      .split(',')
+      .map(id => parseInt(id.trim()))
+      .filter(id => !isNaN(id));
+
+    const correctOptionIds = question.answer_options
+      .filter(o => o.is_correct)
+      .map(o => o.option_id);
+
+    const totalCorrectOptions = correctOptionIds.length;
+    if (totalCorrectOptions === 0) return 0;
+
+    let correctSelections = 0;
+    let wrongSelections = 0;
+    for (const selectedId of selectedIds) {
+      if (correctOptionIds.includes(selectedId)) correctSelections++;
+      else wrongSelections++;
+    }
+
+    const partialScore = Math.max(0, correctSelections - wrongSelections);
+    return (partialScore / totalCorrectOptions) * scoreWeight;
+  }
+
+  // SINGLE_CHOICE: simple correct/incorrect
+  return answer.is_correct ? scoreWeight : 0;
+};
+
 const calculateScore = (examQuestions, answers) => {
   let totalScore = 0;
   let totalWeight = 0;
@@ -30,53 +81,14 @@ const calculateScore = (examQuestions, answers) => {
     if (!answer) continue;
 
     const questionType = answer.question?.question_type;
-
     if (questionType === 'ESSAY') {
       hasEssay = true;
-      if (answer.manual_score !== null && answer.manual_score !== undefined) {
-        const percentageOfWeight = (answer.manual_score / 100) * examQuestion.score_weight;
-        totalScore += percentageOfWeight;
-      } else {
+      if (answer.manual_score === null || answer.manual_score === undefined) {
         allEssayGraded = false;
       }
-    } else if (questionType === 'MULTIPLE_CHOICE') {
-      // Multiple choice: partial scoring based on correct options
-      if (answer.mc_option_ids && answer.question?.answer_options) {
-        const selectedIds = answer.mc_option_ids
-          .split(',')
-          .map(id => parseInt(id.trim()))
-          .filter(id => !isNaN(id));
-
-        const correctOptionIds = answer.question.answer_options
-          .filter(o => o.is_correct)
-          .map(o => o.option_id);
-
-        const totalCorrectOptions = correctOptionIds.length;
-
-        if (totalCorrectOptions > 0) {
-          let correctSelections = 0;
-          let wrongSelections = 0;
-
-          for (const selectedId of selectedIds) {
-            if (correctOptionIds.includes(selectedId)) {
-              correctSelections++;
-            } else {
-              wrongSelections++;
-            }
-          }
-
-          // Partial score: correct selections minus wrong selections, min 0
-          const partialScore = Math.max(0, correctSelections - wrongSelections);
-          const percentageOfWeight = (partialScore / totalCorrectOptions) * examQuestion.score_weight;
-          totalScore += percentageOfWeight;
-        }
-      }
-    } else {
-      // SINGLE_CHOICE: simple correct/incorrect
-      if (answer.is_correct) {
-        totalScore += examQuestion.score_weight;
-      }
     }
+
+    totalScore += scoreSingleQuestion(answer.question, examQuestion.score_weight, answer);
   }
 
   const finalScore = totalWeight > 0 ? Math.round(((totalScore / totalWeight) * 100) * 100) / 100 : 0;
@@ -153,4 +165,4 @@ const calculateAndSaveResult = async (examParticipantId, tx = prisma) => {
   return { finalScore, totalScore, totalWeight, hasEssay, allEssayGraded, status: newStatus };
 };
 
-module.exports = { calculateScore, calculateAndSaveResult };
+module.exports = { calculateScore, calculateAndSaveResult, scoreSingleQuestion };

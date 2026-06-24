@@ -247,72 +247,8 @@ describe('deleteUser', () => {
   });
 });
 
-// ─── scoreAnswer ──────────────────────────────────────────────────────────────
-
-describe('scoreAnswer', () => {
-  test('WB-UC-27: missing answer_id → 400', async () => {
-    const { next } = await run(ctrl.scoreAnswer, { body: { manual_score: 50 } });
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
-  });
-
-  test('WB-UC-28: score out of range → 400', async () => {
-    const { next } = await run(ctrl.scoreAnswer, { body: { answer_id: 1, manual_score: 150 } });
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
-  });
-
-  test('WB-UC-29: answer not found → 404', async () => {
-    prisma.answer.findUnique.mockResolvedValue(null);
-    const { next } = await run(ctrl.scoreAnswer, { body: { answer_id: 1, manual_score: 80 } });
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 404 }));
-  });
-
-  test('WB-UC-30: teacher not owner → 403', async () => {
-    prisma.answer.findUnique.mockResolvedValue({ answer_id: 1, exam_participant_id: 5, exam_participant: { exam: { teacher_id: 99 } } });
-    prisma.teacher.findUnique.mockResolvedValue({ teacher_id: 1 });
-    const { next } = await run(ctrl.scoreAnswer, { body: { answer_id: 1, manual_score: 80 } });
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
-  });
-
-  test('WB-UC-31: valid → updates, recalculates, logs', async () => {
-    prisma.answer.findUnique.mockResolvedValue({ answer_id: 1, exam_participant_id: 5, exam_participant: { exam: { teacher_id: 1 } } });
-    prisma.teacher.findUnique.mockResolvedValue({ teacher_id: 1 });
-    prisma.answer.update.mockResolvedValue({ answer_id: 1, manual_score: 80 });
-    calculateAndSaveResult.mockResolvedValue({ finalScore: 88, status: 'GRADED' });
-    const { res } = await run(ctrl.scoreAnswer, { body: { answer_id: 1, manual_score: 80 } });
-    expect(calculateAndSaveResult).toHaveBeenCalledWith(5);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ recalculated: { final_score: 88, status: 'GRADED' } }));
-  });
-});
-
-// ─── finalizeScore ────────────────────────────────────────────────────────────
-
-describe('finalizeScore', () => {
-  test('WB-UC-32: missing exam_participant_id → 400', async () => {
-    const { next } = await run(ctrl.finalizeScore, { body: {} });
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
-  });
-
-  test('WB-UC-33: participant not found → 404', async () => {
-    prisma.examParticipant.findUnique.mockResolvedValue(null);
-    const { next } = await run(ctrl.finalizeScore, { body: { exam_participant_id: 5 } });
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 404 }));
-  });
-
-  test('WB-UC-34: teacher not owner → 403', async () => {
-    prisma.examParticipant.findUnique.mockResolvedValue({ exam: { teacher_id: 99 } });
-    prisma.teacher.findUnique.mockResolvedValue({ teacher_id: 1 });
-    const { next } = await run(ctrl.finalizeScore, { body: { exam_participant_id: 5 } });
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
-  });
-
-  test('WB-UC-35: valid → returns finalized result', async () => {
-    prisma.examParticipant.findUnique.mockResolvedValue({ exam: { teacher_id: 1 } });
-    prisma.teacher.findUnique.mockResolvedValue({ teacher_id: 1 });
-    calculateAndSaveResult.mockResolvedValue({ finalScore: 75, totalScore: 30, totalWeight: 40, hasEssay: true, status: 'GRADED' });
-    const { res } = await run(ctrl.finalizeScore, { body: { exam_participant_id: 5 } });
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ result: expect.objectContaining({ final_score: 75, status: 'GRADED' }) }));
-  });
-});
+// Catatan: scoreAnswer & finalizeScore dihapus (endpoint /users/score & /users/finalize
+// dihapus). Grading manual lewat /exam-results/manual-score & /exam-results/calculate.
 
 // Catatan: batchCreateUsers dipindah ke services/usersBatchService.
 // Lihat tests/unit/users-batch-service.test.js (UB-04..UB-06).
