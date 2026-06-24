@@ -17,8 +17,6 @@ const {
   updateUserRole,
   toggleUserStatus,
   deleteUser,
-  scoreAnswer,
-  finalizeScore
 } = require('../controllers/userController');
 
 // Routes for Admin - User Management
@@ -36,9 +34,5 @@ router.put('/:id', verifyToken, checkRole('admin'), updateUser);            // U
 router.put('/:id/role', verifyToken, checkRole('admin'), updateUserRole);   // Update role
 router.patch('/:id/status', verifyToken, checkRole('admin'), toggleUserStatus); // Toggle status
 router.delete('/:id', verifyToken, checkRole('admin'), deleteUser);         // Delete user
-
-// Routes for Teacher - Grading
-router.post('/score', verifyToken, checkRole('teacher'), scoreAnswer);         // Score essay manually
-router.post('/finalize', verifyToken, checkRole('teacher'), finalizeScore);    // Finalize score
 
 module.exports = router;

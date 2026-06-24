@@ -203,32 +203,16 @@ describe('POST /api/users/batch-delete', () => {
   });
 });
 
-// ─── Essay grading (teacher role) ────────────────────────────────────────────
+// ─── Essay grading endpoint dipindah ke /exam-results/manual-score ────────────
 
-describe('POST /api/users/score (essay grading)', () => {
-  beforeEach(() => {
+describe('POST /api/users/score (dihapus)', () => {
+  test('BB-U14: endpoint /users/score sudah dihapus → 404', async () => {
     prisma.user.findUnique.mockResolvedValue(mockTeacherDbUser);
     prisma.teacher.findUnique.mockResolvedValue(mockTeacher);
-  });
-
-  test('BB-U14: teacher scores essay answer → 200', async () => {
-    prisma.answer.findUnique.mockResolvedValue({
-      answer_id: 1,
-      exam_participant_id: 1,
-      question_id: 5,
-      manual_score: null,
-      question: { question_type: 'ESSAY', question_bank: { subject: 'Matematika' } },
-      exam_participant: {
-        exam: { exam_id: 1, subject: 'Matematika' },
-        exam_status: 'COMPLETED',
-      },
-    });
-    prisma.answer.update = jest.fn().mockResolvedValue({});
-
     const res = await request(app)
       .post('/api/users/score')
       .set('Authorization', `Bearer ${teacherToken()}`)
       .send({ answer_id: 1, score: 85 });
-    expect([200, 201, 400, 422]).toContain(res.status); // accept any sensible outcome
+    expect(res.status).toBe(404);
   });
 });
