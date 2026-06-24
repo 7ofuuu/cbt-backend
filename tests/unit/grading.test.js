@@ -6,7 +6,50 @@
 jest.mock('../../src/config/db');
 
 const prisma = require('../../src/config/db');
-const { calculateScore, calculateAndSaveResult } = require('../../src/services/scoreService');
+const { calculateScore, calculateAndSaveResult, scoreSingleQuestion } = require('../../src/services/scoreService');
+
+// ─── scoreSingleQuestion ──────────────────────────────────────────────────────
+
+describe('scoreSingleQuestion', () => {
+  const single = (is_correct) => ({ is_correct, mc_option_ids: null, manual_score: null, question: { question_type: 'SINGLE_CHOICE', answer_options: [] } });
+  const essay = (manual_score) => ({ is_correct: null, mc_option_ids: null, manual_score, question: { question_type: 'ESSAY', answer_options: [] } });
+  const mc = (selectedCsv) => ({
+    is_correct: null, manual_score: null, mc_option_ids: selectedCsv,
+    question: { question_type: 'MULTIPLE_CHOICE', answer_options: [
+      { option_id: 1, is_correct: true }, { option_id: 2, is_correct: true },
+      { option_id: 3, is_correct: false }, { option_id: 4, is_correct: false },
+    ] },
+  });
+
+  test('SQ-01: single benar -> full weight', () => {
+    const a = single(true);
+    expect(scoreSingleQuestion(a.question, 10, a)).toBe(10);
+  });
+  test('SQ-02: single salah -> 0', () => {
+    const a = single(false);
+    expect(scoreSingleQuestion(a.question, 10, a)).toBe(0);
+  });
+  test('SQ-03: essay dengan manual_score -> proporsional', () => {
+    const a = essay(50);
+    expect(scoreSingleQuestion(a.question, 10, a)).toBe(5);
+  });
+  test('SQ-04: essay tanpa manual_score -> 0', () => {
+    const a = essay(null);
+    expect(scoreSingleQuestion(a.question, 10, a)).toBe(0);
+  });
+  test('SQ-05: MC semua benar (1,2) -> full weight', () => {
+    const a = mc('1,2');
+    expect(scoreSingleQuestion(a.question, 10, a)).toBe(10);
+  });
+  test('SQ-06: MC partial (1 benar) -> setengah', () => {
+    const a = mc('1');
+    expect(scoreSingleQuestion(a.question, 10, a)).toBe(5);
+  });
+  test('SQ-07: MC 1 benar 1 salah -> net 0 -> 0', () => {
+    const a = mc('1,3');
+    expect(scoreSingleQuestion(a.question, 10, a)).toBe(0);
+  });
+});
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 

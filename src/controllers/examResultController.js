@@ -5,7 +5,7 @@
  */
 const prisma = require('../config/db');
 const { asyncHandler, AppError } = require('../utils/asyncHandler');
-const { calculateAndSaveResult } = require('../services/scoreService');
+const { calculateAndSaveResult, scoreSingleQuestion } = require('../services/scoreService');
 const { buildPagination, paginatedResponse } = require('../services/userService');
 const activityLogService = require('../services/activityLogService');
 const { validateSubjectAccess, buildSubjectFilter } = require('../services/subjectAccessService');
@@ -370,36 +370,10 @@ const getDetailedResult = asyncHandler(async (req, res) => {
 
   validateSubjectAccess(teacher, result.exam_participant?.exam?.subject, 'ujian');
 
-  // Map answers to exam questions for review, using same scoring logic as scoreService
+  // Map answers to exam questions for review, reusing the shared per-question scorer.
   const detailedReview = result.exam_participant.exam.exam_questions.map(eq => {
     const answer = result.exam_participant.answers.find(a => a.question_id === eq.question_id);
-
-    let scoreObtained = 0;
-    if (answer) {
-      if (eq.question.question_type === 'ESSAY') {
-        scoreObtained = answer.manual_score != null
-          ? (answer.manual_score / 100) * eq.score_weight
-          : 0;
-      } else if (eq.question.question_type === 'MULTIPLE_CHOICE') {
-        // Partial scoring: correct_selected - wrong_selected, min 0
-        const correctIds = new Set(
-          eq.question.answer_options.filter(o => o.is_correct).map(o => o.option_id)
-        );
-        const selectedIds = answer.mc_option_ids
-          ? answer.mc_option_ids.split(',').map(Number).filter(Boolean)
-          : [];
-        const correctSelected = selectedIds.filter(id => correctIds.has(id)).length;
-        const wrongSelected = selectedIds.filter(id => !correctIds.has(id)).length;
-        const totalCorrect = correctIds.size;
-        if (totalCorrect > 0) {
-          const ratio = Math.max(0, correctSelected - wrongSelected) / totalCorrect;
-          scoreObtained = ratio * eq.score_weight;
-        }
-      } else {
-        // SINGLE_CHOICE
-        scoreObtained = answer.is_correct ? eq.score_weight : 0;
-      }
-    }
+    const scoreObtained = scoreSingleQuestion(eq.question, eq.score_weight, answer);
 
     return {
       sequence: eq.sequence,
@@ -469,6 +443,15 @@ const submitExam = asyncHandler(async (req, res) => {
   validateSubjectAccess(teacher, exam.subject, 'ujian');
   if (exam.exam_status !== 'ENDED') throw new AppError('Ujian harus berstatus ENDED sebelum dapat disubmit', 400);
   if (exam.teacher_submitted_at) throw new AppError('Ujian sudah pernah disubmit', 400);
+
+  // Cegah arsip jika masih ada peserta yang essay-nya belum dinilai (status COMPLETED),
+  // karena nilainya disembunyikan dari siswa sampai GRADED.
+  const ungraded = await prisma.examParticipant.count({
+    where: { exam_id: examId, exam_status: 'COMPLETED' },
+  });
+  if (ungraded > 0) {
+    throw new AppError(`Masih ada ${ungraded} peserta yang jawaban essay-nya belum dinilai. Selesaikan penilaian sebelum mengarsipkan.`, 400);
+  }
 
   await prisma.exam.update({
     where: { exam_id: examId },
