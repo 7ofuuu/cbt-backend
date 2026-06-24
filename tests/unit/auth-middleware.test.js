@@ -100,7 +100,7 @@ describe('verifyToken', () => {
     expect(req.user).toMatchObject({ id: 1, role: 'admin', is_super_admin: false });
   });
 
-  // ─── Single active session (Opsi A) ─────────────────────────────────────────
+  // ─── Single active session ─────────────────────────────────────────
 
   test('WB-VM-09: token sid matches DB active_session_id → next()', async () => {
     prisma.user.findUnique.mockResolvedValue({ id: 1, role: 'admin', is_active: true, is_super_admin: false, active_session_id: 'sess-current' });
