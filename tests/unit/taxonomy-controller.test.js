@@ -5,12 +5,8 @@
  *   subjects / grade levels / majors master data (CRUD + soft delete + cascade)
  */
 jest.mock('../../src/config/db');
-jest.mock('../../src/services/taxonomyCascadeService', () => ({
-  cascadeRename: jest.fn().mockResolvedValue({ exams: 1 }),
-}));
 
 const prisma = require('../../src/config/db');
-const { cascadeRename } = require('../../src/services/taxonomyCascadeService');
 const ctrl = require('../../src/controllers/taxonomyController');
 
 const makeReqRes = (overrides = {}) => {
@@ -78,20 +74,13 @@ describe('updateSubject', () => {
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 404 }));
   });
 
-  test('WB-TX-07: valid without cascade → cascade is null', async () => {
-    prisma.subject.findUnique.mockResolvedValue({ subject_id: 1, name: 'IPA' });
-    prisma.subject.update.mockResolvedValue({ subject_id: 1, name: 'IPA Baru' });
-    const { res } = await run(ctrl.updateSubject, { params: { id: '1' }, body: { name: 'IPA Baru' } });
-    expect(cascadeRename).not.toHaveBeenCalled();
-    expect(res.json.mock.calls[0][0].cascade).toBeNull();
-  });
-
-  test('WB-TX-08: cascade_rename=true → cascadeRename service invoked', async () => {
-    prisma.subject.findUnique.mockResolvedValue({ subject_id: 1, name: 'IPA' });
-    prisma.subject.update.mockResolvedValue({ subject_id: 1, name: 'IPA Baru' });
-    const { res } = await run(ctrl.updateSubject, { params: { id: '1' }, body: { name: 'IPA Baru', cascade_rename: true } });
-    expect(cascadeRename).toHaveBeenCalledWith(expect.objectContaining({ field: 'subject', oldValue: 'IPA', newValue: 'IPA Baru' }));
-    expect(res.json.mock.calls[0][0].cascade).toEqual({ exams: 1 });
+  test('WB-TX-07: name immutable → perubahan name diabaikan', async () => {
+    prisma.subject.findUnique.mockResolvedValue({ subject_id: 1, name: 'IPA', is_active: true });
+    prisma.subject.update.mockResolvedValue({ subject_id: 1, name: 'IPA', color: 'red' });
+    await run(ctrl.updateSubject, { params: { id: '1' }, body: { name: 'IPA Baru', color: 'red' } });
+    const dataArg = prisma.subject.update.mock.calls[0][0].data;
+    expect(dataArg).not.toHaveProperty('name');
+    expect(dataArg.color).toBe('red');
   });
 });
 
@@ -138,11 +127,13 @@ describe('updateGradeLevel', () => {
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 404 }));
   });
 
-  test('WB-TX-15: cascade_rename=true → cascade on grade_level field', async () => {
-    prisma.gradeLevel.findUnique.mockResolvedValue({ grade_level_id: 1, value: '10' });
-    prisma.gradeLevel.update.mockResolvedValue({ grade_level_id: 1, value: 'X' });
-    await run(ctrl.updateGradeLevel, { params: { id: '1' }, body: { value: 'X', cascade_rename: true } });
-    expect(cascadeRename).toHaveBeenCalledWith(expect.objectContaining({ field: 'grade_level', oldValue: '10', newValue: 'X' }));
+  test('WB-TX-15: value immutable → perubahan value diabaikan', async () => {
+    prisma.gradeLevel.findUnique.mockResolvedValue({ grade_level_id: 1, value: 'X' });
+    prisma.gradeLevel.update.mockResolvedValue({ grade_level_id: 1, value: 'X', label: 'Kelas 10' });
+    await run(ctrl.updateGradeLevel, { params: { id: '1' }, body: { value: 'XYZ', label: 'Kelas 10' } });
+    const dataArg = prisma.gradeLevel.update.mock.calls[0][0].data;
+    expect(dataArg).not.toHaveProperty('value');
+    expect(dataArg.label).toBe('Kelas 10');
   });
 });
 

@@ -12,6 +12,10 @@ jest.mock('../../src/config/db');
 jest.mock('../../src/services/activityLogService', () => ({
   logFromRequest: jest.fn().mockResolvedValue(undefined),
 }));
+jest.mock('../../src/services/taxonomyValidationService', () => ({
+  loadActiveTaxonomy: jest.fn().mockResolvedValue({ subjects: new Set(), gradeLevels: new Set(), majors: new Set() }),
+  assertExamTaxonomy: jest.fn(),
+}));
 
 const prisma = require('../../src/config/db');
 const ctrl = require('../../src/controllers/examController');

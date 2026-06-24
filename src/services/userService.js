@@ -5,75 +5,9 @@
 const prisma = require('../config/db');
 const bcrypt = require('bcryptjs');
 const { AppError } = require('../utils/asyncHandler');
+const { loadActiveTaxonomy, assertStudentClassroom } = require('./taxonomyValidationService');
 
 const SALT_ROUNDS = 12;
-
-/**
- * Valid classroom format: X-IPA-1, XI-IPS-2, XII-Bahasa-3, etc.
- */
-const CLASSROOM_REGEX = /^(X|XI|XII)-(IPA|IPS|Bahasa)-(\d+)$/;
-
-/**
- * Map classroom prefix to grade_level
- */
-const GRADE_LEVEL_MAP = { X: '10', XI: '11', XII: '12' };
-
-/**
- * Map grade_level to valid classroom prefixes
- */
-const GRADE_TO_PREFIX = { '10': 'X', '11': 'XI', '12': 'XII' };
-
-/**
- * Validate classroom format and extract components.
- * @param {string} classroom
- * @returns {{ prefix: string, major: string, number: string }}
- * @throws {AppError} if format is invalid
- */
-const validateClassroom = (classroom) => {
-  const match = classroom.match(CLASSROOM_REGEX);
-  if (!match) {
-    throw new AppError(
-      'Format kelas tidak valid. Gunakan format: X-IPA-1, XI-IPS-2, XII-Bahasa-3',
-      400
-    );
-  }
-  return { prefix: match[1], major: match[2], number: match[3] };
-};
-
-/**
- * Validate that classroom, grade_level, and major are consistent.
- * @param {string} classroom
- * @param {string} gradeLevel
- * @param {string} major
- * @throws {AppError} if inconsistent
- */
-const validateClassroomConsistency = (classroom, gradeLevel, major) => {
-  const { prefix, major: classMajor } = validateClassroom(classroom);
-
-  // Validate grade_level matches classroom prefix
-  if (gradeLevel) {
-    const expectedPrefix = GRADE_TO_PREFIX[gradeLevel];
-    if (expectedPrefix && expectedPrefix !== prefix) {
-      throw new AppError(
-        `Tingkat ${gradeLevel} tidak sesuai dengan kelas ${classroom}. Seharusnya dimulai dengan ${expectedPrefix}`,
-        400
-      );
-    }
-  }
-
-  // Validate major matches classroom major
-  if (major && major !== classMajor) {
-    throw new AppError(
-      `Jurusan ${major} tidak sesuai dengan kelas ${classroom}. Seharusnya ${classMajor}`,
-      400
-    );
-  }
-
-  return {
-    grade_level: gradeLevel || GRADE_LEVEL_MAP[prefix],
-    major: major || classMajor,
-  };
-};
 
 /**
  * Create a user with role-specific profile in a transaction.
@@ -102,7 +36,7 @@ const toFriendlyUniqueError = (error, { username, nip, nisn }) => {
   return new AppError('Data sudah digunakan (duplikat)', 409);
 };
 
-const createUserWithProfile = async (params, tx = prisma) => {
+const createUserWithProfile = async (params, tx = prisma, active = null) => {
   const {
     username, password, role, full_name,
     classroom, grade_level, major, nisn,
@@ -121,12 +55,13 @@ const createUserWithProfile = async (params, tx = prisma) => {
     });
 
     if (role === 'student') {
-      // Validate and auto-derive classroom fields
+      // Validate classroom against active taxonomy and derive grade_level/major.
       let finalGradeLevel = grade_level;
       let finalMajor = major;
 
       if (classroom) {
-        const derived = validateClassroomConsistency(classroom, grade_level, major);
+        const act = active || await loadActiveTaxonomy(client);
+        const derived = assertStudentClassroom({ classroom, grade_level, major }, act);
         finalGradeLevel = derived.grade_level;
         finalMajor = derived.major;
       }
@@ -268,12 +203,7 @@ const formatUserData = (user) => {
 };
 
 module.exports = {
-  CLASSROOM_REGEX,
-  GRADE_LEVEL_MAP,
-  GRADE_TO_PREFIX,
   SALT_ROUNDS,
-  validateClassroom,
-  validateClassroomConsistency,
   createUserWithProfile,
   buildPagination,
   paginatedResponse,
