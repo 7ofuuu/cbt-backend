@@ -5,6 +5,7 @@
  */
 jest.mock('../../src/config/db');
 jest.mock('../../src/services/scoreService', () => ({
+  ...jest.requireActual('../../src/services/scoreService'),
   calculateAndSaveResult: jest.fn(),
 }));
 jest.mock('../../src/services/activityLogService', () => ({
