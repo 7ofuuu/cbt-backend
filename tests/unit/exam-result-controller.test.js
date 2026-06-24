@@ -278,11 +278,20 @@ describe('submitExam', () => {
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
   });
 
-  test('WB-ER-27: valid → archives exam', async () => {
+  test('WB-ER-27: valid (semua dinilai) → archives exam', async () => {
     prisma.exam.findUnique.mockResolvedValue({ exam_id: 1, exam_status: 'ENDED', teacher_submitted_at: null, subject: 'IPA' });
+    prisma.examParticipant.count.mockResolvedValue(0);
     prisma.exam.update.mockResolvedValue({});
     const { res } = await run(ctrl.submitExam, { params: { examId: '1' } });
     expect(prisma.exam.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ teacher_submitted_at: expect.any(Date) }) }));
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+  });
+
+  test('WB-ER-28: masih ada peserta COMPLETED (essay belum dinilai) → 400', async () => {
+    prisma.exam.findUnique.mockResolvedValue({ exam_id: 1, exam_status: 'ENDED', teacher_submitted_at: null, subject: 'IPA' });
+    prisma.examParticipant.count.mockResolvedValue(2);
+    const { next } = await run(ctrl.submitExam, { params: { examId: '1' } });
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
+    expect(prisma.exam.update).not.toHaveBeenCalled();
   });
 });

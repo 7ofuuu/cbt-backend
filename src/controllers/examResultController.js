@@ -444,6 +444,15 @@ const submitExam = asyncHandler(async (req, res) => {
   if (exam.exam_status !== 'ENDED') throw new AppError('Ujian harus berstatus ENDED sebelum dapat disubmit', 400);
   if (exam.teacher_submitted_at) throw new AppError('Ujian sudah pernah disubmit', 400);
 
+  // Cegah arsip jika masih ada peserta yang essay-nya belum dinilai (status COMPLETED),
+  // karena nilainya disembunyikan dari siswa sampai GRADED.
+  const ungraded = await prisma.examParticipant.count({
+    where: { exam_id: examId, exam_status: 'COMPLETED' },
+  });
+  if (ungraded > 0) {
+    throw new AppError(`Masih ada ${ungraded} peserta yang jawaban essay-nya belum dinilai. Selesaikan penilaian sebelum mengarsipkan.`, 400);
+  }
+
   await prisma.exam.update({
     where: { exam_id: examId },
     data: { teacher_submitted_at: new Date() },
