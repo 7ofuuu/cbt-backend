@@ -16,8 +16,6 @@ jest.mock('../../src/services/userService', () => ({
   buildPagination: jest.fn().mockReturnValue({ skip: 0, take: 10, page: 1, limit: 10 }),
   paginatedResponse: jest.fn(),
   formatUserData: jest.fn(),
-  validateClassroom: jest.fn(),
-  validateClassroomConsistency: jest.fn(),
 }));
 
 const request = require('supertest');

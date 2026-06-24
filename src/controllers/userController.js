@@ -9,13 +9,13 @@ const prisma = require('../config/db');
 const bcrypt = require('bcryptjs');
 const { asyncHandler, AppError } = require('../utils/asyncHandler');
 const {
-  validateClassroomConsistency,
   createUserWithProfile,
   buildPagination,
   paginatedResponse,
   formatUserData,
   SALT_ROUNDS,
 } = require('../services/userService');
+const { loadActiveTaxonomy, assertStudentClassroom } = require('../services/taxonomyValidationService');
 const { calculateAndSaveResult } = require('../services/scoreService');
 const activityLogService = require('../services/activityLogService');
 const { createUsersBatch } = require('../services/usersBatchService');
@@ -149,10 +149,10 @@ const updateUser = asyncHandler(async (req, res) => {
       if (nisn !== undefined) studentData.nisn = nisn;
 
       if (classroom !== undefined) {
-        const derived = validateClassroomConsistency(
-          classroom,
-          grade_level || user.student.grade_level,
-          major || user.student.major
+        const active = await loadActiveTaxonomy(tx);
+        const derived = assertStudentClassroom(
+          { classroom, grade_level: grade_level || user.student.grade_level, major: major || user.student.major },
+          active
         );
         studentData.classroom = classroom;
         studentData.grade_level = derived.grade_level;
